@@ -1,0 +1,282 @@
+{
+  "info": {
+    "name": "Insurance Collection",
+    "description": null,
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health-Insurance",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "",
+        "url": {
+          "raw": "https://policyplanner.com/health-insurance/companies/plans?policy=Health",
+          "protocol": "https",
+          "host": [
+            "policyplanner",
+            "com"
+          ],
+          "path": [
+            "health-insurance",
+            "companies",
+            "plans"
+          ],
+          "query": [
+            {
+              "key": "policy",
+              "value": "Health"
+            }
+          ],
+          "variable": []
+        }
+      }
+    },
+    {
+      "name": "Health-Insurance-Premium",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "",
+        "url": {
+          "raw": "https://policyplanner.com/health-insurance/sbi/1004/225/premium",
+          "protocol": "https",
+          "host": [
+            "policyplanner",
+            "com"
+          ],
+          "path": [
+            "health-insurance",
+            "sbi",
+            "1004",
+            "225",
+            "premium"
+          ],
+          "query": [],
+          "variable": []
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n\"coverAmount\": 1000000,\n\"zone\": \"1\",\n\"age\": 30,\n\"sage\": null,\n\"c1age\": null,\n\"c2age\": null,\n\"c3age\": null,\n\"c4age\": null\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Super-Top-Up-Health-Insurance",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "",
+        "url": {
+          "raw": "https://policyplanner.com/health-insurance/companies/plans?policy=super_top_up",
+          "protocol": "https",
+          "host": [
+            "policyplanner",
+            "com"
+          ],
+          "path": [
+            "health-insurance",
+            "companies",
+            "plans"
+          ],
+          "query": [
+            {
+              "key": "policy",
+              "value": "super_top_up"
+            }
+          ],
+          "variable": []
+        }
+      }
+    },
+    {
+      "name": "Super-Top-Up-Health-Insurance-Premium",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "",
+        "url": {
+          "raw": "https://policyplanner.com/health-insurance/nic/1005/193/supertopup",
+          "protocol": "https",
+          "host": [
+            "policyplanner",
+            "com"
+          ],
+          "path": [
+            "health-insurance",
+            "nic",
+            "1005",
+            "193",
+            "supertopup"
+          ],
+          "query": [],
+          "variable": []
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n\"coverAmount\": 1000000,\n\"age\": 18,\n\"sage\": null,\n\"c1age\": null,\n\"c2age\": null,\n\"c3age\": null,\n\"c4age\": null\n}\n",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Personal-Accident-Insurance",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "",
+        "url": {
+          "raw": "https://policyplanner.com/health-insurance/companies/plans?policy=pa",
+          "protocol": "https",
+          "host": [
+            "policyplanner",
+            "com"
+          ],
+          "path": [
+            "health-insurance",
+            "companies",
+            "plans"
+          ],
+          "query": [
+            {
+              "key": "policy",
+              "value": "pa"
+            }
+          ],
+          "variable": []
+        }
+      }
+    },
+    {
+      "name": "Personal-Accident-Insurance-Premium",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "",
+        "url": {
+          "raw": "https://policyplanner.com/health-insurance/star/1003/227/pa",
+          "protocol": "https",
+          "host": [
+            "policyplanner",
+            "com"
+          ],
+          "path": [
+            "health-insurance",
+            "star",
+            "1003",
+            "227",
+            "pa"
+          ],
+          "query": [],
+          "variable": []
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n\"coverAmount\": 1000000,\n\"category\": 1,\n\"age\": 26\n}\n",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Hospital-Cash-Insurance",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "",
+        "url": {
+          "raw": "https://policyplanner.com/health-insurance/companies/plans?policy=hc",
+          "protocol": "https",
+          "host": [
+            "policyplanner",
+            "com"
+          ],
+          "path": [
+            "health-insurance",
+            "companies",
+            "plans"
+          ],
+          "query": [
+            {
+              "key": "policy",
+              "value": "hc"
+            }
+          ],
+          "variable": []
+        }
+      }
+    },
+    {
+      "name": "Hospital-Cash-Insurance-Premium",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "",
+        "url": {
+          "raw": "https://policyplanner.com/health-insurance/generali/1017/224/hc",
+          "protocol": "https",
+          "host": [
+            "policyplanner",
+            "com"
+          ],
+          "path": [
+            "health-insurance",
+            "generali",
+            "1017",
+            "224",
+            "hc"
+          ],
+          "query": [],
+          "variable": []
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n\"age\": 26,\n\"coverAmount\": 1000,\n\"noOfAdults\": 1,\n\"noOfChildren\": 0,\n\"noOfDays\": 30\n}\n",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "variable": []
+}

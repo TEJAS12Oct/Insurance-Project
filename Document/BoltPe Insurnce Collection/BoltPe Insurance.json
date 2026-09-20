@@ -1,0 +1,52 @@
+{
+  "info": {
+    "name": "BoltPe Insurance",
+    "description": null,
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "BoltPe Insurance",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "disabled": false,
+            "type": "default"
+          }
+        ],
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "",
+        "url": {
+          "raw": "http://localhost:8080/api/v1/insurance/plans",
+          "protocol": "http",
+          "host": [
+            "localhost:8080"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "insurance",
+            "plans"
+          ],
+          "query": [],
+          "variable": []
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"insuranceType\": \"HEALTH\",\n  \"data\": {\n    \"coverAmount\": 1000000,\n    \"zone\": \"3\",\n    \"age\": 25,\n    \"spouseAge\": 24,\n    \"child1Age\": 1,\n    \"child2Age\": 1,\n    \"child3Age\": 1,\n    \"child4Age\": 1\n  }\n}\n\n// {\n//   \"insuranceType\": \"SUPER_TOP_UP\",\n//   \"data\": {\n//     \"coverAmount\": 1000000,\n//     \"age\": 19,\n//     \"spouseAge\": null,\n//     \"child1Age\": null,\n//     \"child2Age\": null,\n//     \"child3Age\": null,\n//     \"child4Age\": null\n//   }\n// }\n\n// {\n//   \"insuranceType\": \"PERSONAL_ACCIDENT\",\n//   \"data\": {\n//     \"coverAmount\": 1000000,\n//     \"category\": 2,\n//     \"age\": 18\n//   }\n// }\n\n// {\n//   \"insuranceType\": \"HOSPITAL_CASH\",\n//   \"data\": {\n//     \"age\": 18,\n//     \"coverAmount\": 1500,\n//     \"noOfAdults\": 1,\n//     \"noOfChildren\": 0,\n//     \"noOfDays\": 30\n//   }\n// }",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "variable": []
+}
