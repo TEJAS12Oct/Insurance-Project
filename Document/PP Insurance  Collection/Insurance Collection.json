@@ -46,7 +46,7 @@
         },
         "description": "",
         "url": {
-          "raw": "https://policyplanner.com/health-insurance/sbi/1004/225/premium",
+          "raw": "https://policyplanner.com/health-insurance/hdfc/1008/108/premium",
           "protocol": "https",
           "host": [
             "policyplanner",
@@ -54,9 +54,9 @@
           ],
           "path": [
             "health-insurance",
-            "sbi",
-            "1004",
-            "225",
+            "hdfc",
+            "1008",
+            "108",
             "premium"
           ],
           "query": [],
@@ -64,7 +64,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n\"coverAmount\": 1000000,\n\"zone\": \"1\",\n\"age\": 30,\n\"sage\": null,\n\"c1age\": null,\n\"c2age\": null,\n\"c3age\": null,\n\"c4age\": null\n}",
+          "raw": "{\n\"coverAmount\": 1000000,\n    \"zone\": \"2\",\n    \"age\": 30,\n\"sage\": null,\n\"c1age\": null,\n\"c2age\": null,\n\"c3age\": null,\n\"c4age\": null\n}",
           "options": {
             "raw": {
               "language": "json"

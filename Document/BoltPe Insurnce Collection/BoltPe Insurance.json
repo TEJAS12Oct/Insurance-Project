@@ -13,12 +13,20 @@
           {
             "key": "Content-Type",
             "value": "application/json",
+            "description": "",
             "disabled": false,
             "type": "default"
           }
         ],
         "auth": {
-          "type": "noauth"
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhNzY1OTc3NS0yYTk2LTRiMGMtOThmYy1hODhlNTJiMzdlNjAiLCJlbWFpbCI6IiIsIm1vYmlsZSI6IiIsInJvbGUiOiJVU0VSIiwiZmlyc3ROYW1lIjoiIiwibGFzdE5hbWUiOiIiLCJuYW1lIjoiYm9sdHBlX2E3NjU5Nzc1LTJhOTYtNGIwYy05OGZjLWE4OGU1MmIzN2U2MCIsInVzZXJuYW1lIjoiYm9sdHBlX2E3NjU5Nzc1LTJhOTYtNGIwYy05OGZjLWE4OGU1MmIzN2U2MCIsImlzQWN0aXZlIjp0cnVlLCJpc0VtYWlsVmVyaWZpZWQiOmZhbHNlLCJpc01waW5TZXQiOmZhbHNlLCJpczJGQUVuYWJsZWQiOmZhbHNlLCJpYXQiOjE3OTA3NjI1NjYsImV4cCI6MTc5MTM2NzM2Nn0.Sp95SM1yM0BMJuI0rJf6uaI1hZFVcneYsYyp-lAlkt8",
+              "type": "string"
+            }
+          ]
         },
         "description": "",
         "url": {
@@ -38,7 +46,50 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"insuranceType\": \"HEALTH\",\n  \"data\": {\n    \"coverAmount\": 1000000,\n    \"zone\": \"3\",\n    \"age\": 25,\n    \"spouseAge\": 24,\n    \"child1Age\": 1,\n    \"child2Age\": 1,\n    \"child3Age\": 1,\n    \"child4Age\": 1\n  }\n}\n\n// {\n//   \"insuranceType\": \"SUPER_TOP_UP\",\n//   \"data\": {\n//     \"coverAmount\": 1000000,\n//     \"age\": 19,\n//     \"spouseAge\": null,\n//     \"child1Age\": null,\n//     \"child2Age\": null,\n//     \"child3Age\": null,\n//     \"child4Age\": null\n//   }\n// }\n\n// {\n//   \"insuranceType\": \"PERSONAL_ACCIDENT\",\n//   \"data\": {\n//     \"coverAmount\": 1000000,\n//     \"category\": 2,\n//     \"age\": 18\n//   }\n// }\n\n// {\n//   \"insuranceType\": \"HOSPITAL_CASH\",\n//   \"data\": {\n//     \"age\": 18,\n//     \"coverAmount\": 1500,\n//     \"noOfAdults\": 1,\n//     \"noOfChildren\": 0,\n//     \"noOfDays\": 30\n//   }\n// }",
+          "raw": "// {\n//   \"insuranceType\": \"HEALTH\",\n//   \"data\": {\n//     \"coverAmount\": 1000000,\n//     \"zone\": \"3\",\n//     \"age\": 25,\n//     \"spouseAge\": 24,\n//     \"child1Age\": 1,\n//     \"child2Age\": null,\n//     \"child3Age\": null,\n//     \"child4Age\": null\n//   }\n// }\n\n// {\n//   \"insuranceType\": \"SUPER_TOP_UP\",\n//   \"data\": {\n//     \"coverAmount\": 1000000,\n//     \"age\": 19,\n//     \"spouseAge\": null,\n//     \"child1Age\": null,\n//     \"child2Age\": null,\n//     \"child3Age\": null,\n//     \"child4Age\": null\n//   }\n// }\n\n{\n  \"insuranceType\": \"PERSONAL_ACCIDENT\",\n  \"data\": {\n    \"coverAmount\": 1000000,\n    \"category\": 2,\n    \"age\": 26\n  }\n}\n\n// {\n//   \"insuranceType\": \"HOSPITAL_CASH\",\n//   \"data\": {\n//     \"age\": 18,\n//     \"coverAmount\": 1500,\n//     \"noOfAdults\": 1,\n//     \"noOfChildren\": 0,\n//     \"noOfDays\": 30\n//   }\n// }",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Proposal Form",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhNzY1OTc3NS0yYTk2LTRiMGMtOThmYy1hODhlNTJiMzdlNjAiLCJlbWFpbCI6IiIsIm1vYmlsZSI6IiIsInJvbGUiOiJVU0VSIiwiZmlyc3ROYW1lIjoiIiwibGFzdE5hbWUiOiIiLCJuYW1lIjoiYm9sdHBlX2E3NjU5Nzc1LTJhOTYtNGIwYy05OGZjLWE4OGU1MmIzN2U2MCIsInVzZXJuYW1lIjoiYm9sdHBlX2E3NjU5Nzc1LTJhOTYtNGIwYy05OGZjLWE4OGU1MmIzN2U2MCIsImlzQWN0aXZlIjp0cnVlLCJpc0VtYWlsVmVyaWZpZWQiOmZhbHNlLCJpc01waW5TZXQiOmZhbHNlLCJpczJGQUVuYWJsZWQiOmZhbHNlLCJpYXQiOjE3OTA3NjI1NjYsImV4cCI6MTc5MTM2NzM2Nn0.Sp95SM1yM0BMJuI0rJf6uaI1hZFVcneYsYyp-lAlkt8",
+              "type": "string"
+            }
+          ]
+        },
+        "description": "",
+        "url": {
+          "raw": "http://localhost:8080/api/v1/insurance/proposals/save",
+          "protocol": "http",
+          "host": [
+            "localhost:8080"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "insurance",
+            "proposals",
+            "save"
+          ],
+          "query": [],
+          "variable": []
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"client_name\": \"bolt_pay\",\n  \"formType\": \"hospicash\", // health, supertopup, hospicash\n  \"insuranceType\": \"HOSPITAL_CASH\", // HEALTH, SUPER_TOP_UP, HOSPITAL_CASH \n  \"data\": {\n    \"productName\": \"Health Insurance\",\n    \"productType\": \"New\",\n    \"pincode\": \"180000\",\n    \"cityState\": \"Delhi\",\n    \"zone\": \"2\",\n    \"upgradeZone\": \"No\",\n    \"adultCount\": 4,\n    \"childCount\": 4,\n    \"proposerName\": \"Tejas Jawale\",\n    \"proposerDOB\": \"12-12-1989\",\n    \"proposerGender\": \"male\",\n    \"proposerEmail\": \"tejas@gmail.com\",\n    \"proposerPhone\": \"+919000090000\",\n    \"sumInsured\": 1000000,\n    \"selectedTenure\": 1,\n    \"annualIncome\": \"3L_5L\",\n    \"nriDiscount\": \"No\",\n    \"includeSelf\": \"No\",\n    \"bureauDiscount\": \"No\",\n    \"aadharNumber\": \"123456789765\",\n    \"panNumber\": \"ABCDE1234F\",\n    \"basePremium\": 12000,\n    \"totalPremium\": 14160,\n    \"additionalCovers\": {\n      \"ptdBenefitBase\": true,\n      \"ppdBenefitBase\": true,\n      \"ttdBenefitBase\": false\n    },\n    \"adults\": [\n      {\n        \"relationship\": \"self\",\n        \"title\": \"Mr\",\n        \"fullName\": \"Sample Self\",\n        \"dob\": \"12-05-1988\",\n        \"height\": 175,\n        \"weight\": 72,\n        \"abhaId\": \"\",\n        \"preExistingDisease\": \"zzz\",\n        \"medicalCondition\": \"None\"\n      },\n      {\n        \"relationship\": \"spouse\",\n        \"title\": \"Mrs\",\n        \"fullName\": \"Sample Spouse\",\n        \"dob\": \"10-08-1990\",\n        \"height\": 165,\n        \"weight\": 60,\n        \"abhaId\": \"\",\n        \"preExistingDisease\": \"vvvv\",\n        \"medicalCondition\": \"None\"\n      },\n      {\n        \"relationship\": \"father\",\n        \"title\": \"Mr\",\n        \"fullName\": \"Sample Father\",\n        \"dob\": \"05-03-1962\",\n        \"height\": 170,\n        \"weight\": 70,\n        \"abhaId\": \"\",\n        \"preExistingDisease\": \"ddd\",\n        \"medicalCondition\": \"None\"\n      },\n      {\n        \"relationship\": \"mother\",\n        \"title\": \"Mrs\",\n        \"fullName\": \"Sample Mother\",\n        \"dob\": \"15-06-1962\",\n        \"height\": 160,\n        \"weight\": 62,\n        \"abhaId\": \"\",\n        \"preExistingDisease\": \"hhh\",\n        \"medicalCondition\": \"None\"\n      }\n    ],\n\n    \"children\": [\n      {\n        \"relationship\": \"son\",\n        \"fullName\": \"Sample Child 1\",\n        \"dob\": \"20-09-2013\",\n        \"height\": 145,\n        \"weight\": 38,\n        \"abhaId\": \"\",\n        \"preExistingDisease\": \"ttt\",\n        \"medicalCondition\": \"None\"\n      },\n      {\n        \"relationship\": \"daughter\",\n        \"fullName\": \"Sample Child 2\",\n        \"dob\": \"20-09-2013\",\n        \"height\": 140,\n        \"weight\": 34,\n        \"abhaId\": \"\",\n        \"preExistingDisease\": \"hhh\",\n        \"medicalCondition\": \"None\"\n      },\n      {\n        \"relationship\": \"son\",\n        \"fullName\": \"Sample Child 3\",\n        \"dob\": \"20-09-2014\",\n        \"height\": 132,\n        \"weight\": 29,\n        \"abhaId\": \"\",\n        \"preExistingDisease\": \"hhh\",\n        \"medicalCondition\": \"None\"\n      },\n      {\n        \"relationship\": \"daughter\",\n        \"fullName\": \"Sample Child 4\",\n        \"dob\": \"22-07-2018\",\n        \"height\": 122,\n        \"weight\": 24,\n        \"abhaId\": \"\",\n        \"preExistingDisease\": \"hhh\",\n        \"medicalCondition\": \"None\"\n      }\n    ]\n  }\n}\n\n\n// {\n//   \"client_name\": \"bolt_pay\",\n//   \"formType\": \"pa\",\n//   \"insuranceType\": \"PERSONAL_ACCIDENT\",\n//   \"data\": {\n//     \"productName\": \"ICICI Lombard Family Shield\",\n//     \"productType\": \"Portability\",\n//     \"pincode\": \"411033\",\n//     \"city\": \"Delhi\",\n//     \"proposerName\": \"Tejas Jawale\",\n//     \"gender\": \"male\",\n//     \"dateOfBirth\": \"12-10-1999\",\n//     \"mobileNumber\": \"9000000000\",\n//     \"email\": \"sample.user@example.com\",\n//     \"aadharNumber\": \"000000000000\",\n//     \"panNumber\": \"ABCDE1234F\",\n//     \"occupationOfInsured\": \"Salaried\",\n//     \"annualIncome\": 800000,\n//     \"natureOfWorkDesignation\": \"Software Engineer\",\n//     \"coverAmount\": 500000,\n//     \"additionalCovers\": {\n//       \"ptdBenefitBase\": true,\n//       \"ppdBenefitBase\": true,\n//       \"ttdBenefitBase\": false\n//     }\n//   }\n// }",
           "options": {
             "raw": {
               "language": "json"
@@ -48,5 +99,11 @@
       }
     }
   ],
-  "variable": []
+  "variable": [
+    {
+      "key": "dev-end",
+      "value": "",
+      "type": "default"
+    }
+  ]
 }
