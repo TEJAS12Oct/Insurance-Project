@@ -279,6 +279,222 @@ class ProposalFormAdditionalValidatorTest {
         assertError(invalid, "zone", "zone must be one of: 1, 2, 3");
     }
 
+    @Test void validateRawCountsAppliesSameRulesAsValidateRawData() {
+        assertThatCode(() -> validator.validateRawCounts(validRaw())).doesNotThrowAnyException();
+
+        Map<String,Object> data = validRaw();
+        data.put("adultCount", 2.5);
+        assertThatThrownBy(() -> validator.validateRawCounts(data))
+                .isInstanceOf(ProposalAdditionalValidationException.class)
+                .satisfies(ex -> assertThat(errors(ex)).containsEntry("adultCount", "adultCount must be a whole number"));
+    }
+
+    @Test void rejectsNonFiniteCoverAmounts() {
+        for (Object value : List.of(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
+            Map<String,Object> data = new java.util.HashMap<>();
+            data.put("sumInsured", value);
+            assertCoverError(data, "HEALTH", "Invalid coverAmount for HEALTH insurance");
+        }
+    }
+
+    @Test void rejectsCoverAmountBeyondLongRange() {
+        Map<String,Object> data = new java.util.HashMap<>();
+        data.put("coverAmount", new java.math.BigInteger("100000000000000000000"));
+        assertCoverError(data, "PERSONAL_ACCIDENT", "Invalid coverAmount for PERSONAL_ACCIDENT insurance");
+    }
+
+    @Test void acceptsWholeDecimalAndBigDecimalCoverAmounts() {
+        Map<String,Object> data = new java.util.HashMap<>();
+        data.put("sumInsured", 500000.0);
+        assertThatCode(() -> validator.validateRawCoverAmount(data, "HEALTH")).doesNotThrowAnyException();
+        data.put("sumInsured", new BigDecimal("500000.00"));
+        assertThatCode(() -> validator.validateRawCoverAmount(data, "HEALTH")).doesNotThrowAnyException();
+    }
+
+    @Test void rejectsAnyCoverAmountForUnsupportedInsuranceType() {
+        Map<String,Object> data = new java.util.HashMap<>();
+        data.put("sumInsured", 500000);
+        assertCoverError(data, "MOTOR", "Invalid coverAmount for MOTOR insurance");
+    }
+
+    @Test void rejectsNullAndBlankZoneAfterDtoConversion() {
+        var adults = List.of(adult("self","Mr",null,170,70));
+        assertError(groupWith(null,"No","Yes","No",1,0,BigDecimal.ONE,adults,List.of()), "zone", "zone is required");
+        assertError(groupWith("  ","No","Yes","No",1,0,BigDecimal.ONE,adults,List.of()), "zone", "zone is required");
+    }
+
+    @Test void rejectsNonFiniteRawCountsAndAcceptsWholeDecimalCounts() {
+        Map<String,Object> nan = validRaw();
+        nan.put("childCount", Double.NaN);
+        assertRawError(nan, "childCount", "childCount must be a whole number");
+
+        Map<String,Object> wholeDecimals = validRaw();
+        wholeDecimals.put("adultCount", 2.0);
+        wholeDecimals.put("childCount", new BigDecimal("1.00"));
+        assertThatCode(() -> validator.validateRawData(wholeDecimals)).doesNotThrowAnyException();
+    }
+
+    @Test void numericRawTenureIsLeftForDtoValidation() {
+        Map<String,Object> data = validRaw();
+        data.put("selectedTenure", 1);
+        assertThatCode(() -> validator.validateRawData(data)).doesNotThrowAnyException();
+    }
+
+    @Test void rawMemberChecksIgnoreNonListNonMapAndMissingMeasurements() {
+        Map<String,Object> notAList = validRaw();
+        notAList.put("adults", "not-a-list");
+        notAList.put("children", Map.of("height", "tall"));
+        assertThatCode(() -> validator.validateRawData(notAList)).doesNotThrowAnyException();
+
+        Map<String,Object> mixed = validRaw();
+        mixed.put("adults", java.util.Arrays.asList("not-a-map", null, Map.of("height", 170, "weight", 70.5), Map.of()));
+        mixed.put("children", List.of(Map.of("height", 100), Map.of("weight", "light")));
+        assertThatThrownBy(() -> validator.validateRawData(mixed))
+                .isInstanceOf(ProposalAdditionalValidationException.class)
+                .satisfies(ex -> assertThat(errors(ex))
+                        .containsOnlyKeys("children[1].weight")
+                        .containsEntry("children[1].weight", "Weight must be a numeric value"));
+    }
+
+    @Test void skipsCountAndTenureChecksWhenValuesAreNull() {
+        var adults = List.of(adult("self","Mr",null,170,70));
+        var children = List.of(child(100,20), child(101,21));
+        assertThatCode(() -> validator.validate(group(null,null,null,adults,children))).doesNotThrowAnyException();
+    }
+
+    @Test void adultsWithoutRelationshipAreNotTreatedAsDuplicates() {
+        var adults = List.of(adult(null,"Mr",null,170,70), adult("   ","Mrs",null,160,60));
+        assertThatCode(() -> validator.validate(group(2,0,BigDecimal.ONE,adults,List.of()))).doesNotThrowAnyException();
+    }
+
+    @Test void nullAdultEntriesAreIgnored() {
+        var adults = java.util.Arrays.asList(null, adult("self","Mr",null,170,70));
+        assertThatCode(() -> validator.validate(group(1,0,BigDecimal.ONE,adults,List.of()))).doesNotThrowAnyException();
+        assertError(group(2,0,BigDecimal.ONE,adults,List.of()), "adultCount", "adultCount must match the number of adult members");
+    }
+
+    @Test void nullChildEntriesAreIgnored() {
+        var adults = List.of(adult("self","Mr",null,170,70));
+        var children = java.util.Arrays.asList(child(100,20), null);
+        assertThatCode(() -> validator.validate(group(1,1,BigDecimal.ONE,adults,children))).doesNotThrowAnyException();
+    }
+
+    @Test void anySingleNonBlankAdultFieldMakesAdultPopulated() {
+        BigDecimal h = BigDecimal.valueOf(170);
+        List<AdultMemberRequest> singleFieldAdults = List.of(
+                new AdultMemberRequest("self",null,null,null,null,null,null,null,null),
+                new AdultMemberRequest(null,"Mr",null,null,null,null,null,null,null),
+                new AdultMemberRequest(null,null,"Test Person",null,null,null,null,null,null),
+                new AdultMemberRequest(null,null,null,"01-01-1980",null,null,null,null,null),
+                new AdultMemberRequest(null,null,null,null,h,null,null,null,null),
+                new AdultMemberRequest(null,null,null,null,null,h,null,null,null),
+                new AdultMemberRequest(null,null,null,null,null,null,"12345678901234",null,null),
+                new AdultMemberRequest(null,null,null,null,null,null,null,"None",null),
+                new AdultMemberRequest(null,null,null,null,null,null,null,null,"Healthy"));
+        for (AdultMemberRequest member : singleFieldAdults) {
+            assertThatThrownBy(() -> validator.validate(group(1,0,BigDecimal.ONE,List.of(member),List.of())))
+                    .as("adult %s", member)
+                    .isInstanceOf(ProposalAdditionalValidationException.class)
+                    .satisfies(ex -> assertThat(errors(ex))
+                            .doesNotContainKey("adultCount")
+                            .containsAnyOf(Map.entry("adults[0].height", "Height is required"),
+                                    Map.entry("adults[0].weight", "Weight is required")));
+        }
+    }
+
+    @Test void adultWithOnlyBlankFieldsIsNotCounted() {
+        AdultMemberRequest blank = new AdultMemberRequest(" "," "," "," ",null,null," "," "," ");
+        assertError(group(1,0,BigDecimal.ONE,List.of(blank),List.of()), "adultCount", "adultCount must match the number of adult members");
+    }
+
+    @Test void anySingleNonBlankChildFieldMakesChildPopulated() {
+        BigDecimal h = BigDecimal.valueOf(100);
+        var adults = List.of(adult("self","Mr",null,170,70));
+        List<ChildMemberRequest> singleFieldChildren = List.of(
+                new ChildMemberRequest("child",null,null,null,null,null),
+                new ChildMemberRequest(null,"Test Child",null,null,null,null),
+                new ChildMemberRequest(null,null,"01-01-2020",null,null,null),
+                new ChildMemberRequest(null,null,null,h,null,null),
+                new ChildMemberRequest(null,null,null,null,h,null),
+                new ChildMemberRequest(null,null,null,null,null,"Healthy"));
+        for (ChildMemberRequest member : singleFieldChildren) {
+            assertThatThrownBy(() -> validator.validate(group(1,1,BigDecimal.ONE,adults,List.of(member))))
+                    .as("child %s", member)
+                    .isInstanceOf(ProposalAdditionalValidationException.class)
+                    .satisfies(ex -> assertThat(errors(ex))
+                            .doesNotContainKey("childCount")
+                            .containsAnyOf(Map.entry("children[0].height", "Height is required"),
+                                    Map.entry("children[0].weight", "Weight is required")));
+        }
+    }
+
+    @Test void childWithOnlyBlankFieldsIsNotCounted() {
+        var adults = List.of(adult("self","Mr",null,170,70));
+        ChildMemberRequest blank = new ChildMemberRequest(" "," "," ",null,null," ");
+        assertError(group(1,1,BigDecimal.ONE,adults,List.of(blank)), "childCount", "childCount must match the number of child members");
+    }
+
+    @Test void abhaBlankIsOptionalAndMixedValuesGetSpecificMessages() {
+        assertThatCode(() -> validator.validate(group(1,0,BigDecimal.ONE,List.of(adult("self","Mr","   ",170,70)),List.of()))).doesNotThrowAnyException();
+        assertError(group(1,0,BigDecimal.ONE,List.of(adult("self","Mr","12AB",170,70)),List.of()), "adults[0].abhaId", "ABHA Number must contain digits only");
+        assertError(group(1,0,BigDecimal.ONE,List.of(adult("self","Mr","12345678901-AB",170,70)),List.of()), "adults[0].abhaId", "Invalid ABHA Number format");
+    }
+
+    @Test void requiresYesNoFieldsAfterDtoConversion() {
+        var adults = List.of(adult("self","Mr",null,170,70));
+        assertThatThrownBy(() -> validator.validate(groupWith("1",null," ","",1,0,BigDecimal.ONE,adults,List.of())))
+                .isInstanceOf(ProposalAdditionalValidationException.class)
+                .satisfies(ex -> assertThat(errors(ex))
+                        .containsEntry("nriDiscount", "nriDiscount is required")
+                        .containsEntry("includeSelf", "includeSelf is required")
+                        .containsEntry("bureauDiscount", "bureauDiscount is required"));
+    }
+
+    @Test void yesNoFieldsAreCaseInsensitiveAndRejectOtherValues() {
+        var adults = List.of(adult("self","Mr",null,170,70));
+        assertThatCode(() -> validator.validate(groupWith("1","yes","NO","Yes",1,0,BigDecimal.ONE,adults,List.of()))).doesNotThrowAnyException();
+        assertError(groupWith("1","Maybe","Yes","No",1,0,BigDecimal.ONE,adults,List.of()), "nriDiscount", "nriDiscount must be either Yes or No");
+        assertError(groupWith("1","No","Y","No",1,0,BigDecimal.ONE,adults,List.of()), "includeSelf", "includeSelf must be either Yes or No");
+    }
+
+    @Test void rawYesNoRejectsNonStringAndBlankValues() {
+        Map<String,Object> data = validRaw();
+        data.put("nriDiscount", Boolean.TRUE);
+        data.put("includeSelf", 1);
+        data.put("bureauDiscount", "  ");
+        assertThatThrownBy(() -> validator.validateRawData(data))
+                .isInstanceOf(ProposalAdditionalValidationException.class)
+                .satisfies(ex -> assertThat(errors(ex))
+                        .containsEntry("nriDiscount", "nriDiscount must be either Yes or No")
+                        .containsEntry("includeSelf", "includeSelf must be either Yes or No")
+                        .containsEntry("bureauDiscount", "bureauDiscount is required"));
+    }
+
+    @Test void rawYesNoRequiresPresence() {
+        Map<String,Object> data = new java.util.HashMap<>();
+        data.put("zone", "2");
+        assertThatThrownBy(() -> validator.validateRawData(data))
+                .isInstanceOf(ProposalAdditionalValidationException.class)
+                .satisfies(ex -> assertThat(errors(ex))
+                        .containsOnlyKeys("nriDiscount", "includeSelf", "bureauDiscount")
+                        .containsEntry("nriDiscount", "nriDiscount is required"));
+    }
+
+    private Map<String,Object> validRaw() {
+        Map<String,Object> data = new java.util.HashMap<>();
+        data.put("zone", "1");
+        data.put("adultCount", 1);
+        data.put("childCount", 0);
+        data.put("nriDiscount", "No");
+        data.put("includeSelf", "Yes");
+        data.put("bureauDiscount", "No");
+        return data;
+    }
+
+    private GroupProposalRequest groupWith(String zone,String nri,String includeSelf,String bureau,Integer ac,Integer cc,BigDecimal tenure,List<AdultMemberRequest> adults,List<ChildMemberRequest> children) {
+        return new GroupProposalRequest("P","New","411033","Pune",zone,"No",ac,cc,"P","01-01-1980","male","a@b.com","9876543210",BigDecimal.TEN,tenure,"8L_12L",nri,includeSelf,bureau,"123456789012","ABCDE1234F",BigDecimal.TEN,BigDecimal.TEN,adults,children);
+    }
+
     private void assertAcceptedCoverAmounts(String insuranceType, String field, List<Long> values) {
         for (Long value : values) {
             Map<String,Object> data = new java.util.HashMap<>();

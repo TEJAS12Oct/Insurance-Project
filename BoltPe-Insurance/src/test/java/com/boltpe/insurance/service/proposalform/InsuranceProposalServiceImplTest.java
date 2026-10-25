@@ -8,6 +8,7 @@ import com.boltpe.insurance.audit.proposalform.InsuranceProposalAuditService;
 import com.boltpe.insurance.client.proposalform.PolicyPlannerProposalCallResult;
 import com.boltpe.insurance.client.proposalform.PolicyPlannerProposalClient;
 import com.boltpe.insurance.dto.request.proposalform.InsuranceProposalRequest;
+import com.boltpe.insurance.exception.ApiError;
 import com.boltpe.insurance.exception.PolicyPlannerException;
 import com.boltpe.insurance.vendor.response.proposalform.PolicyPlannerProposalResponse;
 import com.boltpe.insurance.validation.proposalform.ProposalFormAgeValidator;
@@ -229,6 +230,135 @@ class InsuranceProposalServiceImplTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("productName is required");
         verifyNoInteractions(client, audit);
+    }
+
+    @Test
+    void rejectsMissingDataObject() {
+        InsuranceProposalRequest request = groupRequest("health");
+        request.put("data", "not-an-object");
+
+        assertThatThrownBy(() -> service.save(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("data is required");
+        verifyNoInteractions(client, audit, groupService, paService);
+    }
+
+    @Test
+    void rejectsMissingNonTextOrBlankInsuranceType() {
+        InsuranceProposalRequest missing = groupRequest("health");
+        missing.getFields().remove("insuranceType");
+        InsuranceProposalRequest nonText = groupRequest("health");
+        nonText.put("insuranceType", 1);
+        InsuranceProposalRequest blank = groupRequest("health");
+        blank.put("insuranceType", "  ");
+
+        for (InsuranceProposalRequest request : List.of(missing, nonText, blank)) {
+            assertThatThrownBy(() -> service.save(request))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("insuranceType is required");
+        }
+        verifyNoInteractions(client, audit);
+    }
+
+    @Test
+    void rejectsInsuranceTypeThatDoesNotMatchFormType() {
+        InsuranceProposalRequest request = groupRequest("supertopup");
+        request.put("insuranceType", "HEALTH");
+
+        assertThatThrownBy(() -> service.save(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("insuranceType does not match formType. Expected: SUPER_TOP_UP");
+        verifyNoInteractions(client, audit);
+    }
+
+    @Test
+    void acceptsPortabilityProductType() {
+        InsuranceProposalRequest request = groupRequest("health");
+        ((Map<String, Object>) request.getFields().get("data")).put("productType", "Portability");
+        Map<String, Object> vendorRequest = Map.of("formType", "health");
+        when(groupService.toVendorRequest(request)).thenReturn(vendorRequest);
+        when(client.save(vendorRequest)).thenReturn(new PolicyPlannerProposalCallResult(
+                201, "ok", new PolicyPlannerProposalResponse(true, "saved", 77, "health", List.of())));
+
+        var response = service.save(request);
+
+        assertThat(response.success()).isTrue();
+        assertThat(response.data().proposalId()).isEqualTo("77");
+    }
+
+    @Test
+    void mapsUnconfirmedSuccessStatusToServiceUnavailable() {
+        InsuranceProposalRequest request = groupRequest("health");
+        Map<String, Object> vendorRequest = Map.of("formType", "health");
+        when(groupService.toVendorRequest(request)).thenReturn(vendorRequest);
+        when(client.save(vendorRequest)).thenReturn(new PolicyPlannerProposalCallResult(
+                200, "{\"success\":false}",
+                new PolicyPlannerProposalResponse(false, "not saved", null, "health", null)));
+
+        assertThatThrownBy(() -> service.save(request))
+                .isInstanceOf(PolicyPlannerException.class)
+                .satisfies(ex -> {
+                    PolicyPlannerException policyPlannerException = (PolicyPlannerException) ex;
+                    assertThat(policyPlannerException.apiError().status()).isEqualTo(503);
+                    assertThat(policyPlannerException.apiError().fieldErrors()).isEmpty();
+                });
+        verify(audit).failed(anyString(), eq(200), eq("{\"success\":false}"), contains("503"), eq("not saved"));
+    }
+
+    @Test
+    void ignoresNullAndBlankVendorMissingFieldNames() {
+        InsuranceProposalRequest request = paRequest();
+        Map<String, Object> vendorRequest = Map.of("formType", "pa");
+        when(paService.toVendorRequest(request)).thenReturn(vendorRequest);
+        when(client.save(vendorRequest)).thenReturn(new PolicyPlannerProposalCallResult(
+                422, "{}",
+                new PolicyPlannerProposalResponse(false, "Missing fields", null, "pa",
+                        java.util.Arrays.asList("city", null, "  "))));
+
+        assertThatThrownBy(() -> service.save(request))
+                .isInstanceOf(PolicyPlannerException.class)
+                .satisfies(ex -> {
+                    PolicyPlannerException policyPlannerException = (PolicyPlannerException) ex;
+                    assertThat(policyPlannerException.apiError().status()).isEqualTo(400);
+                    assertThat(policyPlannerException.apiError().fieldErrors())
+                            .containsExactly(entry("city", "Required field is missing"));
+                });
+    }
+
+    @Test
+    void auditSnapshotSerializationFailureStopsBeforeVendorCall() {
+        JsonMapper failingMapper = spy(new JsonMapper());
+        doThrow(new IllegalArgumentException("serialization failed")).when(failingMapper).writeValueAsString(any());
+        InsuranceProposalServiceImpl failingService = new InsuranceProposalServiceImpl(
+                groupService, paService, client, audit, failingMapper,
+                Validation.buildDefaultValidatorFactory().getValidator(), ageValidator, contactIdentityValidator, additionalValidator);
+        InsuranceProposalRequest request = groupRequest("health");
+        when(groupService.toVendorRequest(request)).thenReturn(Map.of("formType", "health"));
+
+        assertThatThrownBy(() -> failingService.save(request))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Unable to serialize proposal audit snapshot")
+                .hasCauseInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(client, audit);
+    }
+
+    @Test
+    void errorSerializationFailureStoresEmptyJsonInAudit() {
+        JsonMapper failingMapper = spy(new JsonMapper());
+        doThrow(new IllegalArgumentException("serialization failed"))
+                .when(failingMapper).writeValueAsString(argThat(value -> value instanceof ApiError));
+        InsuranceProposalServiceImpl failingService = new InsuranceProposalServiceImpl(
+                groupService, paService, client, audit, failingMapper,
+                Validation.buildDefaultValidatorFactory().getValidator(), ageValidator, contactIdentityValidator, additionalValidator);
+        InsuranceProposalRequest request = groupRequest("health");
+        Map<String, Object> vendorRequest = Map.of("formType", "health");
+        when(groupService.toVendorRequest(request)).thenReturn(vendorRequest);
+        when(client.save(vendorRequest)).thenThrow(new RuntimeException("timeout"));
+
+        assertThatThrownBy(() -> failingService.save(request))
+                .isInstanceOf(PolicyPlannerException.class)
+                .satisfies(ex -> assertThat(((PolicyPlannerException) ex).apiError().status()).isEqualTo(503));
+        verify(audit).unknown(anyString(), eq("Policy Planner response was not received"), eq("{}"));
     }
 
     private InsuranceProposalRequest groupRequest(String formType) {

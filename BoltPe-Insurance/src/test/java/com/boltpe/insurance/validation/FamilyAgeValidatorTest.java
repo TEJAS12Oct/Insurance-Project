@@ -13,4 +13,7 @@ class FamilyAgeValidatorTest {
     @Test void rejectsSpouseChildGapBelow21() { assertEquals("spouse age must be at least 21 years greater than child_1_age", assertThrows(IllegalArgumentException.class, () -> FamilyAgeValidator.validate(55,50,30,null,null,null)).getMessage()); }
     @Test void rejectsChildPairGapBelow2() { assertEquals("minimum age difference between children must be 2 years", assertThrows(IllegalArgumentException.class, () -> FamilyAgeValidator.validate(50,null,20,19,null,null)).getMessage()); }
     @Test void supportsNonSequentialChildren() { assertDoesNotThrow(() -> FamilyAgeValidator.validate(50,null,20,null,16,null)); }
+    @Test void validateAdultRejectsMissingAge() { assertEquals("age is required", assertThrows(IllegalArgumentException.class, () -> FamilyAgeValidator.validateAdult(null)).getMessage()); }
+    @Test void validateRejectsMissingAdultAgeBeforeOtherChecks() { assertEquals("age is required", assertThrows(IllegalArgumentException.class, () -> FamilyAgeValidator.validate(null,17,-1,null,null,null)).getMessage()); }
+    @Test void validateAdultAcceptsExactly18() { assertDoesNotThrow(() -> FamilyAgeValidator.validateAdult(18)); }
 }

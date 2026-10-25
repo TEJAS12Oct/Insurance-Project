@@ -21,4 +21,9 @@ class InsuranceVendorApiConfigServiceTest {
    var repo=mock(InsuranceVendorApiConfigRepository.class); var service=new InsuranceVendorApiConfigService(repo);
    assertThrows(IllegalArgumentException.class,()->service.replaceProductConfiguration(InsuranceType.HEALTH,List.of())); verifyNoInteractions(repo);
  }
+ @Test void nullDiscoveryIsNeverAllowedToDeleteOldData() {
+   var repo=mock(InsuranceVendorApiConfigRepository.class); var service=new InsuranceVendorApiConfigService(repo);
+   var ex=assertThrows(IllegalArgumentException.class,()->service.replaceProductConfiguration(InsuranceType.HOSPITAL_CASH,null));
+   assertEquals("Discovery records must not be empty",ex.getMessage()); verifyNoInteractions(repo);
+ }
 }

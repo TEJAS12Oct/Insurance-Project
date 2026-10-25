@@ -2,10 +2,10 @@
 -- PostgreSQL database dump
 --
 
-\restrict XWXWTDgBg040IgereSUOvUgKQnSUf7IlooqjlRPu82ypfBO71R8ikuwWYrBNbcM
+\restrict hqdBuwMjEZdbdC7dA5JXsYi0cSix9GCwx0GD6eufaGYITD6QpgTzPZQjhfFFckh
 
--- Dumped from database version 16.14 (Debian 16.14-1.pgdg13+1)
--- Dumped by pg_dump version 18.4 (Homebrew)
+-- Dumped from database version 16.15 (Debian 16.15-1.pgdg13+2)
+-- Dumped by pg_dump version 18.4
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -28,17 +28,17 @@ SET default_table_access_method = heap;
 --
 
 CREATE TABLE public.insurance_quote_request (
-    created_at timestamp(6) with time zone NOT NULL,
     id bigint NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    request_id character varying(36) NOT NULL,
-    insurance_type character varying(50) NOT NULL,
-    created_by character varying(100) NOT NULL,
-    updated_by character varying(100) NOT NULL,
     all_api_false text NOT NULL,
     all_api_true text NOT NULL,
     boltpe_request_json text NOT NULL,
     boltpe_response_json text NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    created_by character varying(100) NOT NULL,
+    insurance_type character varying(50) NOT NULL,
+    request_id character varying(36) NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    updated_by character varying(100) NOT NULL,
     user_information text,
     vendor_response_json text NOT NULL
 );
@@ -69,16 +69,16 @@ ALTER TABLE ONLY public.insurance_quote_request
 
 
 --
--- Name: insurance_quote_request insurance_quote_request_request_id_key; Type: CONSTRAINT; Schema: public; Owner: tejasjawale
+-- Name: insurance_quote_request ukml1818ey09kesdbd348tm2xip; Type: CONSTRAINT; Schema: public; Owner: tejasjawale
 --
 
 ALTER TABLE ONLY public.insurance_quote_request
-    ADD CONSTRAINT insurance_quote_request_request_id_key UNIQUE (request_id);
+    ADD CONSTRAINT ukml1818ey09kesdbd348tm2xip UNIQUE (request_id);
 
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict XWXWTDgBg040IgereSUOvUgKQnSUf7IlooqjlRPu82ypfBO71R8ikuwWYrBNbcM
+\unrestrict hqdBuwMjEZdbdC7dA5JXsYi0cSix9GCwx0GD6eufaGYITD6QpgTzPZQjhfFFckh
 

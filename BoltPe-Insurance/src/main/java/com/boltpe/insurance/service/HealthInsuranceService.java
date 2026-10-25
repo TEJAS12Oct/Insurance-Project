@@ -28,10 +28,12 @@ import tools.jackson.databind.json.JsonMapper;
 public class HealthInsuranceService {
     private final PolicyPlannerClient client;
     private final JsonMapper jsonMapper;
+    private final InsurerLogoService logoService;
 
-    public HealthInsuranceService(PolicyPlannerClient client, JsonMapper jsonMapper) {
+    public HealthInsuranceService(PolicyPlannerClient client, JsonMapper jsonMapper, InsurerLogoService logoService) {
         this.client = client;
         this.jsonMapper = jsonMapper;
+        this.logoService = logoService;
     }
 
     public HealthQuoteBatch fetch(HealthInsuranceRequest request) {
@@ -56,7 +58,7 @@ public class HealthInsuranceService {
         if (request.zone() == null || request.zone().isBlank()) {
             throw new IllegalArgumentException("zone is required");
         }
-        if (!(request.zone().equals("1") || request.zone().equals("2") || request.zone().equals("3"))) {
+        if (!request.zone().matches("[123]")) {
             throw new IllegalArgumentException(
                     "Invalid zone. Health Insurance supports only Zone 1, Zone 2 and Zone 3. Please select a supported city.");
         }
@@ -99,7 +101,7 @@ public class HealthInsuranceService {
 
         return new HealthInsuranceResponse.Plan(
                 new HealthInsuranceResponse.Company(companyId, companyName,
-                        source.company() == null ? null : source.company().logoUrl()),
+                        logoService.resolveLogoUrl(companyId, source.company() == null ? null : source.company().logoUrl())),
                 new HealthInsuranceResponse.PlanDetails(planId, planName,
                         source.plan() == null ? null : source.plan().brochureUrl(),
                         source.plan() == null ? null : source.plan().onePagerUrl()),

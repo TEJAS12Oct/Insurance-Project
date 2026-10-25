@@ -2,10 +2,10 @@
 -- PostgreSQL database dump
 --
 
-\restrict QQ8hr7wdIU5dtd9w4Zr3HTLeqwlsiFLXBteKtjumc0rBq6CT9mtcZznLTDcf87l
+\restrict KUOfT74zXCKNb0cSzF8Kd7S8FxnHA5tjVTHSeWFL2D6GFcjZNIPByfWz5Vfcb1T
 
--- Dumped from database version 16.14 (Debian 16.14-1.pgdg13+1)
--- Dumped by pg_dump version 18.4 (Homebrew)
+-- Dumped from database version 16.15 (Debian 16.15-1.pgdg13+2)
+-- Dumped by pg_dump version 18.4
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -28,19 +28,19 @@ SET default_table_access_method = heap;
 --
 
 CREATE TABLE public.insurance_cron_product_execution (
+    id bigint NOT NULL,
+    completed_at timestamp(6) with time zone,
+    created_at timestamp(6) with time zone NOT NULL,
     db_refreshed boolean NOT NULL,
+    error_message text,
+    execution_id character varying(36) NOT NULL,
+    insurance_type character varying(50) NOT NULL,
     records_inserted integer NOT NULL,
     records_received integer NOT NULL,
     redis_refreshed boolean NOT NULL,
-    completed_at timestamp(6) with time zone,
-    created_at timestamp(6) with time zone NOT NULL,
-    id bigint NOT NULL,
+    response_json text,
     started_at timestamp(6) with time zone NOT NULL,
-    status character varying(30) NOT NULL,
-    execution_id character varying(36) NOT NULL,
-    insurance_type character varying(50) NOT NULL,
-    error_message text,
-    response_json text
+    status character varying(30) NOT NULL
 );
 
 
@@ -79,5 +79,5 @@ CREATE INDEX idx_cron_product_execution_id ON public.insurance_cron_product_exec
 -- PostgreSQL database dump complete
 --
 
-\unrestrict QQ8hr7wdIU5dtd9w4Zr3HTLeqwlsiFLXBteKtjumc0rBq6CT9mtcZznLTDcf87l
+\unrestrict KUOfT74zXCKNb0cSzF8Kd7S8FxnHA5tjVTHSeWFL2D6GFcjZNIPByfWz5Vfcb1T
 

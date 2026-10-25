@@ -11,7 +11,9 @@ import com.boltpe.insurance.exception.proposalform.ProposalAgeValidationExceptio
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -288,6 +290,64 @@ class ProposalFormAgeValidatorTest {
                             .containsEntry("adults[0].dob", "Father age must be at least 21 years greater than self age")
                             .containsEntry("children[1].dob", "Self age must be at least 21 years greater than child age");
                 });
+    }
+
+    @Test
+    void defaultConstructorUsesSystemClockForAgeCalculation() {
+        ProposalFormAgeValidator systemClockValidator = new ProposalFormAgeValidator();
+        DateTimeFormatter format = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+        String thirtyYearsAgo = LocalDate.now().minusYears(30).format(format);
+        String nextYear = LocalDate.now().plusYears(1).format(format);
+
+        assertThatCode(() -> systemClockValidator.validate(request(thirtyYearsAgo, List.of(), List.of())))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> systemClockValidator.validate(request(nextYear, List.of(), List.of())))
+                .isInstanceOf(ProposalAgeValidationException.class)
+                .satisfies(ex -> assertThat(((ProposalAgeValidationException) ex).getFieldErrors())
+                        .containsEntry("proposerDOB", "Future DOB is not allowed"));
+    }
+
+    @Test
+    void skipsNullAdultEntriesAndKeepsOriginalAdultIndexes() {
+        assertThatCode(() -> validator.validate(request("29-09-1986",
+                Arrays.asList(null, adult("spouse", "29-09-1991")), List.of())))
+                .doesNotThrowAnyException();
+
+        assertFieldError(request("29-09-1986", Arrays.asList(null, adult("spouse", "29-09-2010")), List.of()),
+                "adults[1].dob", "Spouse age must be between 18 and 80 years");
+    }
+
+    @Test
+    void skipsParentGapRuleWhenSelfAgeIsUnavailable() {
+        GroupProposalRequest request = request("", List.of(adult("father", "29-09-1990")), List.of());
+
+        assertThatThrownBy(() -> validator.validate(request))
+                .isInstanceOf(ProposalAgeValidationException.class)
+                .satisfies(ex -> assertThat(((ProposalAgeValidationException) ex).getFieldErrors())
+                        .containsEntry("proposerDOB", "Self DOB is required")
+                        .doesNotContainKey("adults[0].dob"));
+    }
+
+    @Test
+    void appliesSpouseChildGapWhenSelfAgeIsUnavailable() {
+        GroupProposalRequest request = request("",
+                List.of(adult("spouse", "29-09-1987")), // 39
+                List.of(child("29-09-2007")));          // 19
+        assertThatThrownBy(() -> validator.validate(request))
+                .isInstanceOf(ProposalAgeValidationException.class)
+                .satisfies(ex -> assertThat(((ProposalAgeValidationException) ex).getFieldErrors())
+                        .containsEntry("proposerDOB", "Self DOB is required")
+                        .containsEntry("children[0].dob", "Spouse age must be at least 21 years greater than child age"));
+    }
+
+    @Test
+    void skipsChildParentGapWhenNeitherSelfNorSpouseAgeIsAvailable() {
+        GroupProposalRequest request = request("31-02-1986", List.of(), List.of(child("29-09-2020")));
+        assertThatThrownBy(() -> validator.validate(request))
+                .isInstanceOf(ProposalAgeValidationException.class)
+                .satisfies(ex -> assertThat(((ProposalAgeValidationException) ex).getFieldErrors())
+                        .containsOnlyKeys("proposerDOB")
+                        .containsEntry("proposerDOB", "DOB must be in DD-MM-YYYY format"));
     }
 
     private void assertFieldError(GroupProposalRequest request, String field, String message) {

@@ -29,4 +29,18 @@ class InsuranceApiRefreshServiceTest {
    var r=new InsuranceApiRefreshService(d,db,c,a).refresh("e",InsuranceType.PERSONAL_ACCIDENT);
    assertEquals("PARTIAL_SUCCESS",r.status()); assertTrue(r.dbRefreshed()); assertFalse(r.redisRefreshed());
  }
+ @Test void exceptionWithoutMessageFallsBackToExceptionTypeName() {
+   var d=mock(LivePolicyPlannerDiscoveryClient.class); var db=mock(InsuranceVendorApiConfigService.class); var c=mock(InsuranceApiCacheService.class); var a=mock(InsuranceCronAuditService.class); var audit=new InsuranceCronProductExecution();
+   when(a.startProduct(anyString(),any())).thenReturn(audit); when(d.discover(InsuranceType.HOSPITAL_CASH)).thenThrow(new IllegalStateException());
+   var r=new InsuranceApiRefreshService(d,db,c,a).refresh("e",InsuranceType.HOSPITAL_CASH);
+   assertEquals("FAILED",r.status()); assertEquals("IllegalStateException",r.errorMessage());
+   verify(a).finishProduct(eq(audit),isNull(),eq(0),eq(r)); verifyNoInteractions(db,c);
+ }
+ @Test void exceptionWithBlankMessageFallsBackToExceptionTypeName() {
+   var d=mock(LivePolicyPlannerDiscoveryClient.class); var db=mock(InsuranceVendorApiConfigService.class); var c=mock(InsuranceApiCacheService.class); var a=mock(InsuranceCronAuditService.class);
+   when(a.startProduct(anyString(),any())).thenReturn(new InsuranceCronProductExecution()); when(d.discover(InsuranceType.HEALTH)).thenReturn(snap()); when(db.replaceProductConfiguration(any(),anyList())).thenReturn(1);
+   doThrow(new UnsupportedOperationException("  ")).when(c).put(any(),anyList());
+   var r=new InsuranceApiRefreshService(d,db,c,a).refresh("e",InsuranceType.HEALTH);
+   assertEquals("PARTIAL_SUCCESS",r.status()); assertEquals("UnsupportedOperationException",r.errorMessage());
+ }
 }

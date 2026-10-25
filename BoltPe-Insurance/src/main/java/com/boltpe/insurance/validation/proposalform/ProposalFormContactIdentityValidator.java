@@ -10,6 +10,10 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class ProposalFormContactIdentityValidator {
+    private static final String FIELD_AADHAAR = "aadharNumber";
+    private static final String FIELD_PAN = "panNumber";
+    private static final String FIELD_PINCODE = "pincode";
+
     private static final Pattern DIGITS = Pattern.compile("^[0-9]+$");
     private static final Pattern MOBILE = Pattern.compile("^(?:\\+91)?[6-9][0-9]{9}$");
     private static final Pattern EMAIL = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
@@ -103,75 +107,75 @@ public class ProposalFormContactIdentityValidator {
 
     private void validateAadhaar(String value, boolean required, Map<String, String> errors) {
         if (isBlank(value)) {
-            if (required) errors.put("aadharNumber", "Aadhaar number is required");
+            if (required) errors.put(FIELD_AADHAAR, "Aadhaar number is required");
             return;
         }
         if (value.length() != 12 && DIGITS.matcher(value).matches()) {
-            errors.put("aadharNumber", "Aadhaar number must contain exactly 12 digits");
+            errors.put(FIELD_AADHAAR, "Aadhaar number must contain exactly 12 digits");
             return;
         }
         if (value.matches(".*[A-Za-z].*") && !value.matches(".*[\\s\\-@#$%^&*()_+=].*")) {
-            errors.put("aadharNumber", "Aadhaar number must contain digits only");
+            errors.put(FIELD_AADHAAR, "Aadhaar number must contain digits only");
             return;
         }
         if (!AADHAAR.matcher(value).matches()) {
-            errors.put("aadharNumber", "Invalid Aadhaar number format");
+            errors.put(FIELD_AADHAAR, "Invalid Aadhaar number format");
             return;
         }
         if (AADHAAR_REPEATED_DIGIT.matcher(value).matches()) {
-            errors.put("aadharNumber", "Aadhaar number cannot contain the same digit repeated 12 times");
+            errors.put(FIELD_AADHAAR, "Aadhaar number cannot contain the same digit repeated 12 times");
         }
     }
 
     private void validatePan(String value, boolean required, Map<String, String> errors) {
         if (isBlank(value)) {
-            if (required) errors.put("panNumber", "PAN number is required");
+            if (required) errors.put(FIELD_PAN, "PAN number is required");
             return;
         }
         if (value.length() != 10) {
-            errors.put("panNumber", "PAN number must be exactly 10 characters");
+            errors.put(FIELD_PAN, "PAN number must be exactly 10 characters");
             return;
         }
         if (!value.matches("[A-Za-z0-9]{10}")) {
-            errors.put("panNumber", "Invalid PAN number format");
+            errors.put(FIELD_PAN, "Invalid PAN number format");
             return;
         }
         if (!LETTERS_5.matcher(value.substring(0, 5)).matches()) {
-            errors.put("panNumber", "First 5 PAN characters must be alphabets");
+            errors.put(FIELD_PAN, "First 5 PAN characters must be alphabets");
             return;
         }
         if (!DIGITS_4.matcher(value.substring(5, 9)).matches()) {
-            errors.put("panNumber", "PAN characters 6 to 9 must be digits");
+            errors.put(FIELD_PAN, "PAN characters 6 to 9 must be digits");
             return;
         }
         if (!UPPERCASE_LETTER.matcher(value.substring(9)).matches()) {
-            errors.put("panNumber", "Last PAN character must be an alphabet");
+            errors.put(FIELD_PAN, "Last PAN character must be an alphabet");
             return;
         }
         if (!PAN.matcher(value).matches()) {
-            errors.put("panNumber", "Invalid PAN number format");
+            errors.put(FIELD_PAN, "Invalid PAN number format");
         }
     }
 
     private void validatePincode(String value, Map<String, String> errors) {
         if (isBlank(value)) {
-            errors.put("pincode", "Pincode is required");
+            errors.put(FIELD_PINCODE, "Pincode is required");
             return;
         }
         if (value.length() != 6 && DIGITS.matcher(value).matches()) {
-            errors.put("pincode", "Pincode must contain exactly 6 digits");
+            errors.put(FIELD_PINCODE, "Pincode must contain exactly 6 digits");
             return;
         }
         if (value.length() == 6 && value.charAt(0) == '0' && DIGITS.matcher(value).matches()) {
-            errors.put("pincode", "Pincode must not start with 0");
+            errors.put(FIELD_PINCODE, "Pincode must not start with 0");
             return;
         }
         if (value.matches(".*[A-Za-z].*")) {
-            errors.put("pincode", "Pincode must contain digits only");
+            errors.put(FIELD_PINCODE, "Pincode must contain digits only");
             return;
         }
         if (!PINCODE.matcher(value).matches()) {
-            errors.put("pincode", "Pincode must be a valid 6-digit Indian pincode and must not start with 0");
+            errors.put(FIELD_PINCODE, "Pincode must be a valid 6-digit Indian pincode and must not start with 0");
         }
     }
 

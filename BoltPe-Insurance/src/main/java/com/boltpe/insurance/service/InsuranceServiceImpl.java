@@ -26,6 +26,9 @@ import tools.jackson.databind.json.JsonMapper;
 
 @Service
 public class InsuranceServiceImpl implements InsuranceService {
+    private static final String VENDOR_UNAVAILABLE_MESSAGE = "Policy Planner service is temporarily unavailable. Please try again later.";
+    private static final String SERVICE_UNAVAILABLE_LABEL = "Service Unavailable";
+
     private final HealthInsuranceService healthService;
     private final InsuranceAuditPersistenceService auditService;
     private final JsonMapper jsonMapper;
@@ -82,7 +85,7 @@ public class InsuranceServiceImpl implements InsuranceService {
         } catch (PolicyPlannerException ex) {
             ApiError error = new ApiError(Instant.now(), HttpStatus.SERVICE_UNAVAILABLE.value(),
                     HttpStatus.SERVICE_UNAVAILABLE.getReasonPhrase(),
-                    "Policy Planner service is temporarily unavailable. Please try again later.",
+                    VENDOR_UNAVAILABLE_MESSAGE,
                     requestId, Map.of());
             saveFailureAudit(requestId, request, userJson, requestJson, "[]", "[]", "[]", error);
             throw new PolicyPlannerException(error, ex);
@@ -97,7 +100,7 @@ public class InsuranceServiceImpl implements InsuranceService {
         if (batch.quotes().isEmpty()) {
             ApiError error = new ApiError(Instant.now(), HttpStatus.SERVICE_UNAVAILABLE.value(),
                     HttpStatus.SERVICE_UNAVAILABLE.getReasonPhrase(),
-                    "Policy Planner service is temporarily unavailable. Please try again later.",
+                    VENDOR_UNAVAILABLE_MESSAGE,
                     requestId, Map.of());
             saveFailureAudit(
                     requestId, request, userJson, requestJson,
@@ -139,12 +142,12 @@ public class InsuranceServiceImpl implements InsuranceService {
         try { batch=superTopUpService.fetch(topUp); }
         catch (RuntimeException ex) {
             ApiError error = new ApiError(Instant.now(), HttpStatus.SERVICE_UNAVAILABLE.value(), HttpStatus.SERVICE_UNAVAILABLE.getReasonPhrase(),
-                    "Policy Planner service is temporarily unavailable. Please try again later.", requestId, Map.of());
+                    VENDOR_UNAVAILABLE_MESSAGE, requestId, Map.of());
             saveFailureAudit(requestId,request,userJson,requestJson,"[]","[]","[]",error);
             throw new PolicyPlannerException(error,ex);
         }
         if(batch.quotes().isEmpty()) {
-            ApiError error = new ApiError(Instant.now(),503,"Service Unavailable","Policy Planner service is temporarily unavailable. Please try again later.",requestId,Map.of());
+            ApiError error = new ApiError(Instant.now(),503,SERVICE_UNAVAILABLE_LABEL,VENDOR_UNAVAILABLE_MESSAGE,requestId,Map.of());
             saveFailureAudit(requestId,request,userJson,requestJson,toJsonSafely(batch.apiStatuses().stream().filter(SuperTopUpQuoteBatch.ApiStatus::active).toList()),
                     toJsonSafely(batch.apiStatuses().stream().filter(x->!x.active()).toList()),toJsonSafely(batch.quotes()),error);
             throw new PolicyPlannerException(error,new PolicyPlannerException("No Policy Planner Super Top-Up provider returned a quote"));
@@ -167,12 +170,12 @@ public class InsuranceServiceImpl implements InsuranceService {
         catch (IllegalArgumentException ex) { throw ex; }
         catch (RuntimeException ex) {
             ApiError error = new ApiError(Instant.now(), HttpStatus.SERVICE_UNAVAILABLE.value(), HttpStatus.SERVICE_UNAVAILABLE.getReasonPhrase(),
-                    "Policy Planner service is temporarily unavailable. Please try again later.", requestId, Map.of());
+                    VENDOR_UNAVAILABLE_MESSAGE, requestId, Map.of());
             saveFailureAudit(requestId,request,userJson,requestJson,"[]","[]","[]",error);
             throw new PolicyPlannerException(error,ex);
         }
         if(batch.quotes().isEmpty()) {
-            ApiError error = new ApiError(Instant.now(),503,"Service Unavailable","Policy Planner service is temporarily unavailable. Please try again later.",requestId,Map.of());
+            ApiError error = new ApiError(Instant.now(),503,SERVICE_UNAVAILABLE_LABEL,VENDOR_UNAVAILABLE_MESSAGE,requestId,Map.of());
             saveFailureAudit(requestId,request,userJson,requestJson,toJsonSafely(batch.apiStatuses().stream().filter(PersonalAccidentQuoteBatch.ApiStatus::active).toList()),
                     toJsonSafely(batch.apiStatuses().stream().filter(x->!x.active()).toList()),toJsonSafely(batch.quotes()),error);
             throw new PolicyPlannerException(error,new PolicyPlannerException("No Policy Planner Personal Accident provider returned a quote"));
@@ -191,12 +194,12 @@ public class InsuranceServiceImpl implements InsuranceService {
         try { batch=hospitalCashService.fetch(hc); }
         catch(IllegalArgumentException ex){ throw ex; }
         catch(RuntimeException ex){
-            ApiError error=new ApiError(Instant.now(),503,"Service Unavailable","Policy Planner service is temporarily unavailable. Please try again later.",requestId,Map.of());
+            ApiError error=new ApiError(Instant.now(),503,SERVICE_UNAVAILABLE_LABEL,VENDOR_UNAVAILABLE_MESSAGE,requestId,Map.of());
             saveFailureAudit(requestId,request,userJson,requestJson,"[]","[]","[]",error);
             throw new PolicyPlannerException(error,ex);
         }
         if(batch.quotes().isEmpty()){
-            ApiError error=new ApiError(Instant.now(),503,"Service Unavailable","Policy Planner service is temporarily unavailable. Please try again later.",requestId,Map.of());
+            ApiError error=new ApiError(Instant.now(),503,SERVICE_UNAVAILABLE_LABEL,VENDOR_UNAVAILABLE_MESSAGE,requestId,Map.of());
             saveFailureAudit(requestId,request,userJson,requestJson,toJsonSafely(batch.apiStatuses().stream().filter(HospitalCashQuoteBatch.ApiStatus::active).toList()),toJsonSafely(batch.apiStatuses().stream().filter(x->!x.active()).toList()),toJsonSafely(batch.quotes()),error);
             throw new PolicyPlannerException(error,new PolicyPlannerException("No Policy Planner Hospital Cash provider returned a quote"));
         }

@@ -2,6 +2,8 @@ package com.boltpe.insurance.client.proposalform;
 
 import com.boltpe.insurance.exception.PolicyPlannerException;
 import com.boltpe.insurance.vendor.response.proposalform.PolicyPlannerProposalResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -11,6 +13,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 @Component
 public class PolicyPlannerProposalClient {
+    private static final Logger log = LoggerFactory.getLogger(PolicyPlannerProposalClient.class);
     private static final String PROPOSAL_PATH = "/health-insurance/proposals/save";
 
     private final RestClient restClient;
@@ -22,6 +25,7 @@ public class PolicyPlannerProposalClient {
     }
 
     public PolicyPlannerProposalCallResult save(Object vendorRequest) {
+        log.info("Policy Planner proposal HTTP call started: method=POST, path={}", PROPOSAL_PATH);
         try {
             ResponseEntity<String> entity = restClient.post()
                     .uri(PROPOSAL_PATH)
@@ -30,13 +34,19 @@ public class PolicyPlannerProposalClient {
                     .retrieve()
                     .toEntity(String.class);
             String body = entity.getBody() == null ? "" : entity.getBody();
+            log.info("Policy Planner proposal HTTP call completed: path={}, status={}",
+                    PROPOSAL_PATH, entity.getStatusCode().value());
             return new PolicyPlannerProposalCallResult(
                     entity.getStatusCode().value(), body, parse(body));
         } catch (RestClientResponseException ex) {
             String body = ex.getResponseBodyAsString();
+            log.warn("Policy Planner proposal HTTP error response: path={}, status={}, message={}",
+                    PROPOSAL_PATH, ex.getStatusCode().value(), ex.getMessage());
             return new PolicyPlannerProposalCallResult(
                     ex.getStatusCode().value(), body, parseSafely(body));
         } catch (RuntimeException ex) {
+            log.error("Policy Planner proposal HTTP transport failure: path={}, exceptionType={}, message={}",
+                    PROPOSAL_PATH, ex.getClass().getSimpleName(), ex.getMessage(), ex);
             throw new PolicyPlannerException("Unable to call Policy Planner proposal API", ex);
         }
     }

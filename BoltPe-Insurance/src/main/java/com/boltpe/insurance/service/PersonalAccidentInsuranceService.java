@@ -15,10 +15,12 @@ import tools.jackson.databind.json.JsonMapper;
 public class PersonalAccidentInsuranceService {
     private final PolicyPlannerClient client;
     private final JsonMapper jsonMapper;
+    private final InsurerLogoService logoService;
 
-    public PersonalAccidentInsuranceService(PolicyPlannerClient client, JsonMapper jsonMapper) {
+    public PersonalAccidentInsuranceService(PolicyPlannerClient client, JsonMapper jsonMapper, InsurerLogoService logoService) {
         this.client = client;
         this.jsonMapper = jsonMapper;
+        this.logoService = logoService;
     }
 
     public PersonalAccidentQuoteBatch fetch(PersonalAccidentInsuranceRequest request) {
@@ -95,7 +97,7 @@ public class PersonalAccidentInsuranceService {
                 .orElse(vendorPremiums.getFirst());
 
         return new PersonalAccidentInsuranceResponse.Plan(
-                new PersonalAccidentInsuranceResponse.Company(ids[0], quote.company(), quote.logoUrl()),
+                new PersonalAccidentInsuranceResponse.Company(ids[0], quote.company(), logoService.resolveLogoUrl(ids[0], quote.logoUrl())),
                 new PersonalAccidentInsuranceResponse.PlanDetails(ids[1], quote.plan(), quote.brochureUrl(), quote.onePagerUrl()),
                 new PersonalAccidentInsuranceResponse.Coverage(quote.coverAmount(), null, null, null, null, null),
                 new PersonalAccidentInsuranceResponse.Premium(null, null, displayPremium.value()),

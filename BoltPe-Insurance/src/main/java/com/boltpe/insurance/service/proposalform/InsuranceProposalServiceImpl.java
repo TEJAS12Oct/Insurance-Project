@@ -20,12 +20,15 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.json.JsonMapper;
 
 @Service
 public class InsuranceProposalServiceImpl implements InsuranceProposalService {
+    private static final Logger log = LoggerFactory.getLogger(InsuranceProposalServiceImpl.class);
     private static final String BOLTPE_CLIENT_NAME = "bolt_pay";
 
     private final GroupProposalService groupProposalService;
@@ -62,7 +65,10 @@ public class InsuranceProposalServiceImpl implements InsuranceProposalService {
     public InsuranceProposalResponse save(InsuranceProposalRequest request) {
         Map<String, Object> data = getData(request);
         String insuranceType = validateAndResolveInsuranceType(request, data);
+        log.info("Proposal request validated: formType={}, insuranceType={}", request.getFormType(), insuranceType);
         Map<String, Object> vendorRequest = buildVendorRequest(request, data, insuranceType);
+        log.info("Proposal vendor request built: formType={}, insuranceType={}, fieldCount={}",
+                request.getFormType(), insuranceType, vendorRequest.size());
         String requestId = UUID.randomUUID().toString();
 
         // BoltPe audit snapshot keeps the request exactly as received, including DD-MM-YYYY dates.
@@ -77,8 +83,14 @@ public class InsuranceProposalServiceImpl implements InsuranceProposalService {
 
         PolicyPlannerProposalCallResult result;
         try {
+            log.info("Calling Policy Planner proposal API: requestId={}, formType={}, insuranceType={}",
+                    requestId, request.getFormType(), insuranceType);
             result = client.save(vendorRequest);
+            log.info("Policy Planner proposal API returned: requestId={}, httpStatus={}, saveConfirmed={}",
+                    requestId, result.httpStatus(), result.saveConfirmed());
         } catch (RuntimeException ex) {
+            log.error("Policy Planner proposal API call failed: requestId={}, exceptionType={}, message={}",
+                    requestId, ex.getClass().getSimpleName(), ex.getMessage(), ex);
             ApiError error = serviceUnavailable(requestId);
             auditService.unknown(requestId, "Policy Planner response was not received", toJsonSafely(error));
             throw new PolicyPlannerException(error, ex);

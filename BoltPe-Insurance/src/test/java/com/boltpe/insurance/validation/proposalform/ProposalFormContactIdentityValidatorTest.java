@@ -48,11 +48,17 @@ class ProposalFormContactIdentityValidatorTest {
     @Test void emailRejectsMissingExtension() { assertGroupError(group(validPhone(), "sample@example", validAadhaar(), validPan(), validPin()), "proposerEmail", "Email ID must contain a valid domain extension"); }
     @Test void emailRejectsMultipleAt() { assertGroupError(group(validPhone(), "sample@@example.com", validAadhaar(), validPan(), validPin()), "proposerEmail", "Invalid email ID format"); }
     @Test void emailRejectsSpace() { assertGroupError(group(validPhone(), "sample @example.com", validAadhaar(), validPan(), validPin()), "proposerEmail", "Invalid email ID format"); }
+    @Test void emailRejectsDomainStartingWithDot() { assertGroupError(group(validPhone(), "sample@.com", validAadhaar(), validPan(), validPin()), "proposerEmail", "Email ID must contain a valid domain extension"); }
+    @Test void emailRejectsDomainEndingWithDot() { assertGroupError(group(validPhone(), "sample@example.", validAadhaar(), validPan(), validPin()), "proposerEmail", "Email ID must contain a valid domain extension"); }
+    @Test void emailRejectsDisallowedUsernameCharacter() { assertGroupError(group(validPhone(), "sam!ple@example.com", validAadhaar(), validPan(), validPin()), "proposerEmail", "Invalid email ID format"); }
+    @Test void emailRejectsNumericDomainExtension() { assertGroupError(group(validPhone(), "sample@example.c0m", validAadhaar(), validPan(), validPin()), "proposerEmail", "Invalid email ID format"); }
 
     @Test void aadhaarRejectsWrongLength() { assertGroupError(group(validPhone(), validEmail(), "12345678901", validPan(), validPin()), "aadharNumber", "Aadhaar number must contain exactly 12 digits"); }
     @Test void aadhaarRejectsAlphabet() { assertGroupError(group(validPhone(), validEmail(), "ABCD56789012", validPan(), validPin()), "aadharNumber", "Aadhaar number must contain digits only"); }
     @Test void aadhaarRejectsSpecialFormat() { assertGroupError(group(validPhone(), validEmail(), "1234-5678901", validPan(), validPin()), "aadharNumber", "Invalid Aadhaar number format"); }
     @Test void aadhaarRejectsAllZeros() { assertGroupError(group(validPhone(), validEmail(), "000000000000", validPan(), validPin()), "aadharNumber", "Aadhaar number cannot contain the same digit repeated 12 times"); }
+    @Test void aadhaarRejectsShortAlphanumericAsDigitsOnly() { assertGroupError(group(validPhone(), validEmail(), "ABCD5678", validPan(), validPin()), "aadharNumber", "Aadhaar number must contain digits only"); }
+    @Test void aadhaarRejectsLettersMixedWithSpecialCharactersAsInvalidFormat() { assertGroupError(group(validPhone(), validEmail(), "ABCD-5678901", validPan(), validPin()), "aadharNumber", "Invalid Aadhaar number format"); }
     @Test void aadhaarRejectsAnyRepeatedDigit() { assertGroupError(group(validPhone(), validEmail(), "111111111111", validPan(), validPin()), "aadharNumber", "Aadhaar number cannot contain the same digit repeated 12 times"); }
 
     @Test void panRejectsWrongLength() { assertGroupError(group(validPhone(), validEmail(), validAadhaar(), "ABCD1234F", validPin()), "panNumber", "PAN number must be exactly 10 characters"); }
@@ -64,6 +70,8 @@ class ProposalFormContactIdentityValidatorTest {
     @Test void pincodeRejectsWrongLength() { assertGroupError(group(validPhone(), validEmail(), validAadhaar(), validPan(), "11001"), "pincode", "Pincode must contain exactly 6 digits"); }
     @Test void pincodeRejectsLeadingZero() { assertGroupError(group(validPhone(), validEmail(), validAadhaar(), validPan(), "011001"), "pincode", "Pincode must not start with 0"); }
     @Test void pincodeRejectsAlphabet() { assertGroupError(group(validPhone(), validEmail(), validAadhaar(), validPan(), "41A033"), "pincode", "Pincode must contain digits only"); }
+    @Test void pincodeWithLeadingZeroAndAlphabetIsReportedAsDigitsOnly() { assertGroupError(group(validPhone(), validEmail(), validAadhaar(), validPan(), "0A1234"), "pincode", "Pincode must contain digits only"); }
+    @Test void pincodeWithLeadingZeroAndSpecialCharacterIsInvalid() { assertGroupError(group(validPhone(), validEmail(), validAadhaar(), validPan(), "0-1234"), "pincode", "Pincode must be a valid 6-digit Indian pincode and must not start with 0"); }
     @Test void pincodeRejectsSpecialCharacter() { assertGroupError(group(validPhone(), validEmail(), validAadhaar(), validPan(), "411-03"), "pincode", "Pincode must be a valid 6-digit Indian pincode and must not start with 0"); }
 
     @Test void acceptsValidPaAndOptionalBlankAadhaarPan() {

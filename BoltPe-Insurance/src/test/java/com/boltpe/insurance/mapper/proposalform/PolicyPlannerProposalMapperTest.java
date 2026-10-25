@@ -23,17 +23,17 @@ class PolicyPlannerProposalMapperTest {
         Map<String, Object> vendor = mapper.toVendorRequest(request);
         Map<String, Object> originalData = data(request.toFlatMap());
 
-        assertThat(vendor.get("client_name")).isEqualTo("bolt_pay");
-        assertThat(vendor.get("formType")).isEqualTo("health");
-        assertThat(vendor.get("productName")).isEqualTo("Health Insurance");
-        assertThat(vendor.get("proposerDOB")).isEqualTo("1988-05-12");
+        assertThat(vendor).containsEntry("client_name", "bolt_pay");
+        assertThat(vendor).containsEntry("formType", "health");
+        assertThat(vendor).containsEntry("productName", "Health Insurance");
+        assertThat(vendor).containsEntry("proposerDOB", "1988-05-12");
         assertThat(((Map<?, ?>) ((List<?>) vendor.get("adults")).getFirst()).get("dob"))
                 .isEqualTo("1988-05-12");
         assertThat(((Map<?, ?>) ((List<?>) vendor.get("children")).getFirst()).get("dob"))
                 .isEqualTo("2016-09-20");
 
         assertThat(vendor).doesNotContainKeys("insuranceType", "data");
-        assertThat(originalData.get("proposerDOB")).isEqualTo("12-05-1988");
+        assertThat(originalData).containsEntry("proposerDOB", "12-05-1988");
     }
 
     @Test
@@ -45,10 +45,10 @@ class PolicyPlannerProposalMapperTest {
 
         Map<String, Object> vendor = mapper.toVendorRequest(request);
 
-        assertThat(vendor.get("dateOfBirth")).isEqualTo("1990-01-01");
-        assertThat(vendor.get("productName")).isEqualTo("Personal Accident");
-        assertThat(vendor.get("formType")).isEqualTo("pa");
-        assertThat(vendor.get("client_name")).isEqualTo("bolt_pay");
+        assertThat(vendor).containsEntry("dateOfBirth", "1990-01-01");
+        assertThat(vendor).containsEntry("productName", "Personal Accident");
+        assertThat(vendor).containsEntry("formType", "pa");
+        assertThat(vendor).containsEntry("client_name", "bolt_pay");
         assertThat(vendor).doesNotContainKeys("insuranceType", "data");
     }
 
@@ -107,7 +107,7 @@ class PolicyPlannerProposalMapperTest {
 
         Map<String, Object> vendor = mapper.toVendorRequest(request);
 
-        assertThat(vendor.get("proposerPhone")).isEqualTo("9876543210");
+        assertThat(vendor).containsEntry("proposerPhone", "9876543210");
     }
 
     @Test
@@ -118,7 +118,7 @@ class PolicyPlannerProposalMapperTest {
 
         Map<String, Object> vendor = mapper.toVendorRequest(request);
 
-        assertThat(vendor.get("mobileNumber")).isEqualTo("9876543210");
+        assertThat(vendor).containsEntry("mobileNumber", "9876543210");
     }
 
     @Test
@@ -129,7 +129,7 @@ class PolicyPlannerProposalMapperTest {
 
         Map<String, Object> vendor = mapper.toVendorRequest(request);
 
-        assertThat(vendor.get("mobileNumber")).isEqualTo("9876543210");
+        assertThat(vendor).containsEntry("mobileNumber", "9876543210");
     }
 
     @Test
@@ -150,7 +150,7 @@ class PolicyPlannerProposalMapperTest {
 
             Map<String, Object> vendor = mapper.toVendorRequest(request);
 
-            assertThat(vendor.get("annualIncome").toString()).isEqualTo(amount.toString());
+            assertThat(vendor.get("annualIncome")).hasToString(amount.toString());
         });
     }
 
@@ -162,7 +162,7 @@ class PolicyPlannerProposalMapperTest {
 
         Map<String, Object> vendor = mapper.toVendorRequest(request);
 
-        assertThat(vendor.get("annualIncome").toString()).isEqualTo("1000000");
+        assertThat(vendor.get("annualIncome")).hasToString("1000000");
     }
 
     @Test
@@ -185,6 +185,94 @@ class PolicyPlannerProposalMapperTest {
         assertThatThrownBy(() -> mapper.toVendorRequest(request))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Invalid annualIncome slab");
+    }
+
+    @Test
+    void nullFormTypeIsTreatedAsGroupProposal() {
+        InsuranceProposalRequest request = request(null, "HEALTH", Map.of(
+                "productType", "New",
+                "proposerDOB", "12-05-1988",
+                "dateOfBirth", "01-01-1990"));
+
+        Map<String, Object> vendor = mapper.toVendorRequest(request);
+
+        assertThat(vendor).containsEntry("formType", null);
+        assertThat(vendor).containsEntry("proposerDOB", "1988-05-12");
+        assertThat(vendor).containsEntry("dateOfBirth", "01-01-1990");
+    }
+
+    @Test
+    void leavesExplicitNullAnnualIncomeUntouched() {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("productType", "New");
+        fields.put("annualIncome", null);
+        InsuranceProposalRequest request = request("pa", "PERSONAL_ACCIDENT", fields);
+
+        Map<String, Object> vendor = mapper.toVendorRequest(request);
+
+        assertThat(vendor).containsKey("annualIncome");
+        assertThat(vendor.get("annualIncome")).isNull();
+    }
+
+    @Test
+    void rejectsBlankAnnualIncomeSlab() {
+        InsuranceProposalRequest request = request("pa", "PERSONAL_ACCIDENT", Map.of(
+                "productType", "New",
+                "annualIncome", "   "));
+
+        assertThatThrownBy(() -> mapper.toVendorRequest(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Invalid annualIncome slab");
+    }
+
+    @Test
+    void keepsMobileUnchangedWhenPlus91LengthIsWrongOrValueIsNotText() {
+        InsuranceProposalRequest group = request("health", "HEALTH", Map.of(
+                "productType", "New",
+                "proposerPhone", "+91987654321"));
+        InsuranceProposalRequest pa = request("pa", "PERSONAL_ACCIDENT", Map.of(
+                "productType", "New",
+                "mobileNumber", 9876543210L));
+
+        assertThat(mapper.toVendorRequest(group)).containsEntry("proposerPhone", "+91987654321");
+        assertThat(mapper.toVendorRequest(pa)).containsEntry("mobileNumber", 9876543210L);
+    }
+
+    @Test
+    void skipsNonMapMembersAndMembersWithoutDob() {
+        InsuranceProposalRequest request = request("health", "HEALTH", Map.of(
+                "productType", "New",
+                "adults", List.of("not-a-member", Map.of("fullName", "Adult")),
+                "children", List.of(Map.of("dob", "20-09-2016"))));
+
+        Map<String, Object> vendor = mapper.toVendorRequest(request);
+
+        List<?> adults = (List<?>) vendor.get("adults");
+        assertThat(adults.getFirst()).isEqualTo("not-a-member");
+        assertThat(adults.get(1)).isEqualTo(Map.of("fullName", "Adult"));
+        assertThat(((Map<?, ?>) ((List<?>) vendor.get("children")).getFirst()).get("dob")).isEqualTo("2016-09-20");
+    }
+
+    @Test
+    void rejectsNonTextDate() {
+        InsuranceProposalRequest request = request("pa", "PERSONAL_ACCIDENT", Map.of(
+                "productType", "New",
+                "dateOfBirth", 19900101));
+
+        assertThatThrownBy(() -> mapper.toVendorRequest(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("dateOfBirth must be in DD-MM-YYYY format");
+    }
+
+    @Test
+    void rejectsImpossibleCalendarDate() {
+        InsuranceProposalRequest request = request("pa", "PERSONAL_ACCIDENT", Map.of(
+                "productType", "New",
+                "dateOfBirth", "31-02-1990"));
+
+        assertThatThrownBy(() -> mapper.toVendorRequest(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("dateOfBirth must be in DD-MM-YYYY format");
     }
 
     private InsuranceProposalRequest request(String formType,

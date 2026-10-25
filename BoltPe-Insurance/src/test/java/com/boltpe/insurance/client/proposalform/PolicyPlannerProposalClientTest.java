@@ -83,4 +83,32 @@ class PolicyPlannerProposalClientTest {
                 .isInstanceOf(PolicyPlannerException.class)
                 .hasMessageContaining("Unable to call Policy Planner proposal API");
     }
+
+    @Test
+    void malformedSuccessfulResponseIsRejectedWithParseFailureCause() {
+        server.expect(once(), requestTo("https://policyplanner.com/health-insurance/proposals/save"))
+                .andRespond(withSuccess("not-json", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.save(Map.of("formType", "health")))
+                .isInstanceOf(PolicyPlannerException.class)
+                .hasMessage("Unable to call Policy Planner proposal API")
+                .cause()
+                .isInstanceOf(PolicyPlannerException.class)
+                .hasMessage("Unable to parse Policy Planner proposal response");
+        server.verify();
+    }
+
+    @Test
+    void vendorErrorWithEmptyBodyReturnsResultWithoutParsedResponse() {
+        server.expect(once(), requestTo("https://policyplanner.com/health-insurance/proposals/save"))
+                .andRespond(withStatus(HttpStatus.BAD_GATEWAY));
+
+        PolicyPlannerProposalCallResult result = client.save(Map.of("formType", "health"));
+
+        assertThat(result.httpStatus()).isEqualTo(502);
+        assertThat(result.rawBody()).isEmpty();
+        assertThat(result.response()).isNull();
+        assertThat(result.saveConfirmed()).isFalse();
+        server.verify();
+    }
 }

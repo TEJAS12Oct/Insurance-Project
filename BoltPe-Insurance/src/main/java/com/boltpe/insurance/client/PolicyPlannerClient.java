@@ -34,148 +34,203 @@ public class PolicyPlannerClient {
     }
 
     /** Returns successful quotes plus the true/false status of every discovered premium API. */
+    /** Gets quotes while retaining an API status for every discoverable, non-blank provider URL. */
     public HealthQuoteBatch fetchHealthQuoteBatch(HealthVendorRequest request) {
         HealthDiscoveryResponse discovery = discoverHealthPlans();
         List<HealthPlanApiDescriptor> plans = discovery.data();
         LOGGER.info("Policy Planner health discovery returned count={}, actualPlanApis={}", discovery.count(), plans.size());
-
         List<HealthVendorResponse> responses = new ArrayList<>();
         List<HealthQuoteBatch.ApiStatus> statuses = new ArrayList<>();
-        int attempted = 0, success = 0, failed = 0, skipped = 0;
-
+        int skipped = 0;
         for (HealthPlanApiDescriptor descriptor : plans) {
             if (descriptor == null || descriptor.api_type() == null || descriptor.api_type().isBlank()) {
-                skipped++; LOGGER.warn("Skipping Policy Planner health plan because premium URL is blank"); continue;
+                skipped++;
+                LOGGER.warn("Skipping Policy Planner health plan because premium URL is blank");
+                continue;
             }
-            String premiumUrl = descriptor.api_type();
-            String[] ids = extractIds(premiumUrl);
-            try {
-                String safePath = validateAndNormalizeVendorUrl(premiumUrl); attempted++;
-                HealthVendorResponse response = gateway.fetchHealthQuote(safePath, request);
-                if (response != null) {
-                    responses.add(response); success++;
-                    statuses.add(new HealthQuoteBatch.ApiStatus(premiumUrl, true,
-                            firstNonBlank(response.companyId(), ids[0]), firstNonBlank(response.planId(), ids[1]), null));
-                    LOGGER.info("Policy Planner quote SUCCESS for premiumUrl={}, companyId={}, planId={}, planName={}",
-                            premiumUrl, response.companyId(), response.planId(), response.planName());
-                } else {
-                    failed++; statuses.add(new HealthQuoteBatch.ApiStatus(premiumUrl, false, ids[0], ids[1], "Empty response"));
-                    LOGGER.warn("Policy Planner quote returned empty response for premiumUrl={}", premiumUrl);
-                }
-            } catch (RuntimeException ex) {
-                failed++;
-                String reason = extractErrorMessage(ex);
-
-                statuses.add(new HealthQuoteBatch.ApiStatus(
-                        premiumUrl,
-                        false,
-                        ids[0],
-                        ids[1],
-                        reason
-                ));
-
-                LOGGER.warn(
-                        "Policy Planner quote FAILED for premiumUrl={}, reason={}",
-                        premiumUrl,
-                        reason
-                );
-
-                LOGGER.debug(
-                        "Policy Planner quote failure details for premiumUrl={}",
-                        premiumUrl,
-                        ex
-                );
-            }
+            statuses.add(fetchHealthPremium(descriptor.api_type(), request, responses));
         }
+        long successes = statuses.stream().filter(HealthQuoteBatch.ApiStatus::active).count();
         LOGGER.info("Policy Planner Health quote summary: discovered={}, attempted={}, success={}, failed={}, skipped={}",
-                plans.size(), attempted, success, failed, skipped);
-        // Do not throw here when all premium APIs fail. The caller needs the collected
-        // statuses so all_api_false can persist every failed Policy Planner API.
+                plans.size(), statuses.size(), successes, statuses.size() - successes, skipped);
         return new HealthQuoteBatch(List.copyOf(responses), List.copyOf(statuses));
     }
 
-    public SuperTopUpQuoteBatch fetchSuperTopUpQuoteBatch(SuperTopUpVendorRequest request) {
-        SuperTopUpDiscoveryResponse discovery;
+    private HealthQuoteBatch.ApiStatus fetchHealthPremium(String url, HealthVendorRequest request,
+                                                            List<HealthVendorResponse> responses) {
+        String[] ids = extractIds(url);
         try {
-            discovery = gateway.discoverSuperTopUpPlans(properties.superTopUp().discoveryPath());
-            if (discovery == null || !discovery.success() || discovery.data().isEmpty())
-                throw new PolicyPlannerException("Policy Planner returned no Super Top-Up plan APIs");
-        } catch (PolicyPlannerException ex) { throw ex; }
-        catch (RuntimeException ex) { throw new PolicyPlannerException("Unable to discover Policy Planner Super Top-Up plans", ex); }
+            HealthVendorResponse response = gateway.fetchHealthQuote(validateAndNormalizeVendorUrl(url), request);
+            if (response == null) {
+                LOGGER.warn("Policy Planner quote returned empty response for premiumUrl={}", url);
+                return new HealthQuoteBatch.ApiStatus(url, false, ids[0], ids[1], "Empty response");
+            }
+            responses.add(response);
+            LOGGER.info("Policy Planner quote SUCCESS for premiumUrl={}, companyId={}, planId={}, planName={}",
+                    url, response.companyId(), response.planId(), response.planName());
+            return new HealthQuoteBatch.ApiStatus(url, true, firstNonBlank(response.companyId(), ids[0]),
+                    firstNonBlank(response.planId(), ids[1]), null);
+        } catch (RuntimeException ex) {
+            String reason = extractErrorMessage(ex);
+            LOGGER.warn("Policy Planner quote FAILED for premiumUrl={}, reason={}", url, reason);
+            LOGGER.debug("Policy Planner quote failure details for premiumUrl={}", url, ex);
+            return new HealthQuoteBatch.ApiStatus(url, false, ids[0], ids[1], reason);
+        }
+    }
 
+
+    public SuperTopUpQuoteBatch fetchSuperTopUpQuoteBatch(SuperTopUpVendorRequest request) {
+        SuperTopUpDiscoveryResponse discovery = discoverSuperTopUpPlans();
         List<SuperTopUpVendorResponse> responses = new ArrayList<>();
         List<SuperTopUpQuoteBatch.ApiStatus> statuses = new ArrayList<>();
         for (SuperTopUpPlanApiDescriptor descriptor : discovery.data()) {
-            if (descriptor == null || descriptor.api_type() == null || descriptor.api_type().isBlank()) continue;
-            String url = descriptor.api_type(); String[] ids = extractSuperTopUpIds(url);
-            try {
-                SuperTopUpVendorResponse response = gateway.fetchSuperTopUpQuote(validateAndNormalizeVendorUrl(url), request);
-                if (response != null && (response.error() == null || response.error().isBlank()) && response.premiums() != null && !response.premiums().isEmpty()) {
-                    responses.add(response);
-                    statuses.add(new SuperTopUpQuoteBatch.ApiStatus(url,true,firstNonBlank(response.companyId(),ids[0]),firstNonBlank(response.planId(),ids[1]),null));
-                } else {
-                    String reason = response != null && response.error() != null ? response.error() : "No premiums found";
-                    statuses.add(new SuperTopUpQuoteBatch.ApiStatus(url,false,ids[0],ids[1],reason));
-                }
-            } catch (RuntimeException ex) {
-                statuses.add(new SuperTopUpQuoteBatch.ApiStatus(url,false,ids[0],ids[1],extractErrorMessage(ex)));
+            if (descriptor == null || descriptor.api_type() == null || descriptor.api_type().isBlank()) {
+                continue;
             }
+            statuses.add(fetchSuperTopUpPremium(descriptor.api_type(), request, responses));
         }
-        return new SuperTopUpQuoteBatch(List.copyOf(responses),List.copyOf(statuses));
+        return new SuperTopUpQuoteBatch(List.copyOf(responses), List.copyOf(statuses));
     }
+
+    private SuperTopUpDiscoveryResponse discoverSuperTopUpPlans() {
+        try {
+            SuperTopUpDiscoveryResponse discovery = gateway.discoverSuperTopUpPlans(properties.superTopUp().discoveryPath());
+            if (discovery == null || !discovery.success() || discovery.data().isEmpty()) {
+                throw new PolicyPlannerException("Policy Planner returned no Super Top-Up plan APIs");
+            }
+            return discovery;
+        } catch (PolicyPlannerException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new PolicyPlannerException("Unable to discover Policy Planner Super Top-Up plans", ex);
+        }
+    }
+
+    private SuperTopUpQuoteBatch.ApiStatus fetchSuperTopUpPremium(String url, SuperTopUpVendorRequest request,
+                                                                    List<SuperTopUpVendorResponse> responses) {
+        String[] ids = extractSuperTopUpIds(url);
+        try {
+            SuperTopUpVendorResponse response = gateway.fetchSuperTopUpQuote(validateAndNormalizeVendorUrl(url), request);
+            if (isSuccessfulSuperTopUpQuote(response)) {
+                responses.add(response);
+                return new SuperTopUpQuoteBatch.ApiStatus(url, true, firstNonBlank(response.companyId(), ids[0]),
+                        firstNonBlank(response.planId(), ids[1]), null);
+            }
+            String reason = response != null && response.error() != null ? response.error() : "No premiums found";
+            return new SuperTopUpQuoteBatch.ApiStatus(url, false, ids[0], ids[1], reason);
+        } catch (RuntimeException ex) {
+            return new SuperTopUpQuoteBatch.ApiStatus(url, false, ids[0], ids[1], extractErrorMessage(ex));
+        }
+    }
+
+    private static boolean isSuccessfulSuperTopUpQuote(SuperTopUpVendorResponse response) {
+        return response != null && (response.error() == null || response.error().isBlank())
+                && response.premiums() != null && !response.premiums().isEmpty();
+    }
+
 
 
     public PersonalAccidentQuoteBatch fetchPersonalAccidentQuoteBatch(PersonalAccidentVendorRequest request) {
-        PersonalAccidentDiscoveryResponse discovery;
-        try {
-            discovery = gateway.discoverPersonalAccidentPlans(properties.personalAccident().discoveryPath());
-            if (discovery == null || !discovery.success() || discovery.data().isEmpty())
-                throw new PolicyPlannerException("Policy Planner returned no Personal Accident plan APIs");
-        } catch (PolicyPlannerException ex) { throw ex; }
-        catch (RuntimeException ex) { throw new PolicyPlannerException("Unable to discover Policy Planner Personal Accident plans", ex); }
-
+        PersonalAccidentDiscoveryResponse discovery = discoverPersonalAccidentPlans();
         List<PersonalAccidentVendorResponse> responses = new ArrayList<>();
         List<PersonalAccidentQuoteBatch.ApiStatus> statuses = new ArrayList<>();
         for (PersonalAccidentPlanApiDescriptor descriptor : discovery.data()) {
-            if (descriptor == null || descriptor.api_type() == null || descriptor.api_type().isBlank()) continue;
-            String url = descriptor.api_type(); String[] ids = extractPersonalAccidentIds(url);
-            try {
-                PersonalAccidentVendorResponse response = gateway.fetchPersonalAccidentQuote(validateAndNormalizeVendorUrl(url), request);
-                if (response != null && (response.error() == null || response.error().isBlank()) && response.premiums() != null && !response.premiums().isEmpty()) {
-                    responses.add(response);
-                    statuses.add(new PersonalAccidentQuoteBatch.ApiStatus(url,true,ids[0],ids[1],null));
-                } else {
-                    String reason = response != null && response.error() != null ? response.error() : "No premiums found";
-                    statuses.add(new PersonalAccidentQuoteBatch.ApiStatus(url,false,ids[0],ids[1],reason));
-                }
-            } catch (RuntimeException ex) {
-                statuses.add(new PersonalAccidentQuoteBatch.ApiStatus(url,false,ids[0],ids[1],extractErrorMessage(ex)));
+            if (descriptor == null || descriptor.api_type() == null || descriptor.api_type().isBlank()) {
+                continue;
             }
+            statuses.add(fetchPersonalAccidentPremium(descriptor.api_type(), request, responses));
         }
-        return new PersonalAccidentQuoteBatch(List.copyOf(responses),List.copyOf(statuses));
+        return new PersonalAccidentQuoteBatch(List.copyOf(responses), List.copyOf(statuses));
     }
 
-    public HospitalCashQuoteBatch fetchHospitalCashQuoteBatch(HospitalCashVendorRequest request) {
-        HospitalCashDiscoveryResponse discovery;
+    private PersonalAccidentDiscoveryResponse discoverPersonalAccidentPlans() {
         try {
-            discovery = gateway.discoverHospitalCashPlans(properties.hospitalCash().discoveryPath());
-            if (discovery == null || !discovery.success() || discovery.data().isEmpty())
-                throw new PolicyPlannerException("Policy Planner returned no Hospital Cash plan APIs");
-        } catch (PolicyPlannerException ex) { throw ex; }
-        catch (RuntimeException ex) { throw new PolicyPlannerException("Unable to discover Policy Planner Hospital Cash plans", ex); }
-        List<HospitalCashVendorResponse> responses=new ArrayList<>();
-        List<HospitalCashQuoteBatch.ApiStatus> statuses=new ArrayList<>();
-        for(HospitalCashPlanApiDescriptor d:discovery.data()){
-            if(d==null||d.api_type()==null||d.api_type().isBlank()) continue;
-            String url=d.api_type(); String[] ids=extractHospitalCashIds(url);
-            try {
-                HospitalCashVendorResponse r=gateway.fetchHospitalCashQuote(validateAndNormalizeVendorUrl(url),request);
-                if(r!=null&&(r.error()==null||r.error().isBlank())&&r.premium()!=null){ responses.add(r); statuses.add(new HospitalCashQuoteBatch.ApiStatus(url,true,ids[0],ids[1],null)); }
-                else statuses.add(new HospitalCashQuoteBatch.ApiStatus(url,false,ids[0],ids[1],r!=null&&r.error()!=null?r.error():"No premium found"));
-            } catch(RuntimeException ex){ statuses.add(new HospitalCashQuoteBatch.ApiStatus(url,false,ids[0],ids[1],extractErrorMessage(ex))); }
+            PersonalAccidentDiscoveryResponse discovery = gateway.discoverPersonalAccidentPlans(
+                    properties.personalAccident().discoveryPath());
+            if (discovery == null || !discovery.success() || discovery.data().isEmpty()) {
+                throw new PolicyPlannerException("Policy Planner returned no Personal Accident plan APIs");
+            }
+            return discovery;
+        } catch (PolicyPlannerException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new PolicyPlannerException("Unable to discover Policy Planner Personal Accident plans", ex);
         }
-        return new HospitalCashQuoteBatch(responses,statuses);
     }
+
+    private PersonalAccidentQuoteBatch.ApiStatus fetchPersonalAccidentPremium(String url,
+            PersonalAccidentVendorRequest request, List<PersonalAccidentVendorResponse> responses) {
+        String[] ids = extractPersonalAccidentIds(url);
+        try {
+            PersonalAccidentVendorResponse response = gateway.fetchPersonalAccidentQuote(
+                    validateAndNormalizeVendorUrl(url), request);
+            if (isSuccessfulPersonalAccidentQuote(response)) {
+                responses.add(response);
+                return new PersonalAccidentQuoteBatch.ApiStatus(url, true, ids[0], ids[1], null);
+            }
+            String reason = response != null && response.error() != null ? response.error() : "No premiums found";
+            return new PersonalAccidentQuoteBatch.ApiStatus(url, false, ids[0], ids[1], reason);
+        } catch (RuntimeException ex) {
+            return new PersonalAccidentQuoteBatch.ApiStatus(url, false, ids[0], ids[1], extractErrorMessage(ex));
+        }
+    }
+
+    private static boolean isSuccessfulPersonalAccidentQuote(PersonalAccidentVendorResponse response) {
+        return response != null && (response.error() == null || response.error().isBlank())
+                && response.premiums() != null && !response.premiums().isEmpty();
+    }
+
+
+    public HospitalCashQuoteBatch fetchHospitalCashQuoteBatch(HospitalCashVendorRequest request) {
+        HospitalCashDiscoveryResponse discovery = discoverHospitalCashPlans();
+        List<HospitalCashVendorResponse> responses = new ArrayList<>();
+        List<HospitalCashQuoteBatch.ApiStatus> statuses = new ArrayList<>();
+        for (HospitalCashPlanApiDescriptor descriptor : discovery.data()) {
+            if (descriptor == null || descriptor.api_type() == null || descriptor.api_type().isBlank()) {
+                continue;
+            }
+            statuses.add(fetchHospitalCashPremium(descriptor.api_type(), request, responses));
+        }
+        return new HospitalCashQuoteBatch(responses, statuses);
+    }
+
+    private HospitalCashDiscoveryResponse discoverHospitalCashPlans() {
+        try {
+            HospitalCashDiscoveryResponse discovery = gateway.discoverHospitalCashPlans(
+                    properties.hospitalCash().discoveryPath());
+            if (discovery == null || !discovery.success() || discovery.data().isEmpty()) {
+                throw new PolicyPlannerException("Policy Planner returned no Hospital Cash plan APIs");
+            }
+            return discovery;
+        } catch (PolicyPlannerException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new PolicyPlannerException("Unable to discover Policy Planner Hospital Cash plans", ex);
+        }
+    }
+
+    private HospitalCashQuoteBatch.ApiStatus fetchHospitalCashPremium(String url, HospitalCashVendorRequest request,
+                                                                        List<HospitalCashVendorResponse> responses) {
+        String[] ids = extractHospitalCashIds(url);
+        try {
+            HospitalCashVendorResponse response = gateway.fetchHospitalCashQuote(
+                    validateAndNormalizeVendorUrl(url), request);
+            if (isSuccessfulHospitalCashQuote(response)) {
+                responses.add(response);
+                return new HospitalCashQuoteBatch.ApiStatus(url, true, ids[0], ids[1], null);
+            }
+            String reason = response != null && response.error() != null ? response.error() : "No premium found";
+            return new HospitalCashQuoteBatch.ApiStatus(url, false, ids[0], ids[1], reason);
+        } catch (RuntimeException ex) {
+            return new HospitalCashQuoteBatch.ApiStatus(url, false, ids[0], ids[1], extractErrorMessage(ex));
+        }
+    }
+
+    private static boolean isSuccessfulHospitalCashQuote(HospitalCashVendorResponse response) {
+        return response != null && (response.error() == null || response.error().isBlank())
+                && response.premium() != null;
+    }
+
 
     private static String[] extractHospitalCashIds(String url) {
         try { String[] p=URI.create(url).getPath().split("/"); for(int i=0;i<p.length;i++) if(("hc".equalsIgnoreCase(p[i])||"hospitalcash".equalsIgnoreCase(p[i])||"hospital-cash".equalsIgnoreCase(p[i]))&&i>=2) return new String[]{p[i-2],p[i-1]}; }

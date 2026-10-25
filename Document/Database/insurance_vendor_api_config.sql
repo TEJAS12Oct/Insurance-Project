@@ -2,10 +2,10 @@
 -- PostgreSQL database dump
 --
 
-\restrict GJQinr4UbtwcowuFHslRdDDIm1p693LpotlcycxfLjLGNlm271RjO4sCqwcVQyG
+\restrict HnapUf9YGm0MQ0VJ3fwKAxptNlI719MfEgwkBwh91zT7kncxFwWTScSZsTVNW7B
 
--- Dumped from database version 16.14 (Debian 16.14-1.pgdg13+1)
--- Dumped by pg_dump version 18.4 (Homebrew)
+-- Dumped from database version 16.15 (Debian 16.15-1.pgdg13+2)
+-- Dumped by pg_dump version 18.4
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -28,14 +28,14 @@ SET default_table_access_method = heap;
 --
 
 CREATE TABLE public.insurance_vendor_api_config (
-    created_at timestamp(6) with time zone NOT NULL,
     id bigint NOT NULL,
-    refreshed_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    api_type text NOT NULL,
     company_id character varying(50),
+    created_at timestamp(6) with time zone NOT NULL,
     insurance_type character varying(50) NOT NULL,
     plan_id character varying(50),
-    api_type text NOT NULL
+    refreshed_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL
 );
 
 
@@ -74,5 +74,5 @@ CREATE INDEX idx_vendor_api_insurance_type ON public.insurance_vendor_api_config
 -- PostgreSQL database dump complete
 --
 
-\unrestrict GJQinr4UbtwcowuFHslRdDDIm1p693LpotlcycxfLjLGNlm271RjO4sCqwcVQyG
+\unrestrict HnapUf9YGm0MQ0VJ3fwKAxptNlI719MfEgwkBwh91zT7kncxFwWTScSZsTVNW7B
 

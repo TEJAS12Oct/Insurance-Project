@@ -6,6 +6,8 @@ import com.boltpe.insurance.dto.request.PersonalAccidentInsuranceRequest;
 import com.boltpe.insurance.vendor.request.PersonalAccidentVendorRequest;
 import com.boltpe.insurance.vendor.response.PersonalAccidentVendorResponse;
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -14,13 +16,15 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class PersonalAccidentInsuranceServiceTest {
+    private static final InsurerLogoService LOGOS = new InsurerLogoService("https://s3.example.test", "test-bucket", "publictpap", "insurancelogo");
 
     @Test
     void shouldFetchCoverAmountCategoryAndAgeAndBuildStandardResponse() {
         PolicyPlannerClient client = mock(PolicyPlannerClient.class);
         var service = new PersonalAccidentInsuranceService(
                 client,
-                JsonMapper.builder().build()
+                JsonMapper.builder().build(),
+                LOGOS
         );
 
         var req = new PersonalAccidentInsuranceRequest(
@@ -53,7 +57,8 @@ class PersonalAccidentInsuranceServiceTest {
         PolicyPlannerClient client = mock(PolicyPlannerClient.class);
         var service = new PersonalAccidentInsuranceService(
                 client,
-                JsonMapper.builder().build()
+                JsonMapper.builder().build(),
+                LOGOS
         );
 
         var f = new PersonalAccidentVendorResponse.Feature(
@@ -100,6 +105,9 @@ class PersonalAccidentInsuranceServiceTest {
 
         var plan = res.plans().getFirst();
 
+        assertThat(plan.company().logoUrl())
+                .isEqualTo("https://s3.example.test/test-bucket/publictpap/insurancelogo/star_1003.svg");
+
         assertThat(plan.premium().payablePremium())
                 .isEqualByComparingTo("507");
 
@@ -127,7 +135,8 @@ class PersonalAccidentInsuranceServiceTest {
         PolicyPlannerClient client = mock(PolicyPlannerClient.class);
         var service = new PersonalAccidentInsuranceService(
                 client,
-                JsonMapper.builder().build()
+                JsonMapper.builder().build(),
+                LOGOS
         );
 
         var q = new PersonalAccidentVendorResponse(
@@ -171,7 +180,8 @@ class PersonalAccidentInsuranceServiceTest {
         PolicyPlannerClient client = mock(PolicyPlannerClient.class);
         var service = new PersonalAccidentInsuranceService(
                 client,
-                JsonMapper.builder().build()
+                JsonMapper.builder().build(),
+                LOGOS
         );
 
         var q1 = new PersonalAccidentVendorResponse(
@@ -231,7 +241,8 @@ class PersonalAccidentInsuranceServiceTest {
         PolicyPlannerClient client = mock(PolicyPlannerClient.class);
         var service = new PersonalAccidentInsuranceService(
                 client,
-                JsonMapper.builder().build()
+                JsonMapper.builder().build(),
+                LOGOS
         );
 
         assertThatThrownBy(() ->
@@ -254,7 +265,8 @@ class PersonalAccidentInsuranceServiceTest {
         PolicyPlannerClient client = mock(PolicyPlannerClient.class);
         var service = new PersonalAccidentInsuranceService(
                 client,
-                JsonMapper.builder().build()
+                JsonMapper.builder().build(),
+                LOGOS
         );
 
         var feature = new PersonalAccidentVendorResponse.Feature(
@@ -317,7 +329,8 @@ class PersonalAccidentInsuranceServiceTest {
         PolicyPlannerClient client = mock(PolicyPlannerClient.class);
         var service = new PersonalAccidentInsuranceService(
                 client,
-                JsonMapper.builder().build()
+                JsonMapper.builder().build(),
+                LOGOS
         );
 
         var q = new PersonalAccidentVendorResponse(
@@ -350,7 +363,8 @@ class PersonalAccidentInsuranceServiceTest {
         PolicyPlannerClient client = mock(PolicyPlannerClient.class);
         var service = new PersonalAccidentInsuranceService(
                 client,
-                JsonMapper.builder().build()
+                JsonMapper.builder().build(),
+                LOGOS
         );
 
         var f = new PersonalAccidentVendorResponse.Feature(
@@ -450,7 +464,8 @@ class PersonalAccidentInsuranceServiceTest {
         PolicyPlannerClient client = mock(PolicyPlannerClient.class);
         var service = new PersonalAccidentInsuranceService(
                 client,
-                JsonMapper.builder().build()
+                JsonMapper.builder().build(),
+                LOGOS
         );
 
         var batch = new PersonalAccidentQuoteBatch(
@@ -493,7 +508,8 @@ class PersonalAccidentInsuranceServiceTest {
         PolicyPlannerClient client = mock(PolicyPlannerClient.class);
         var service = new PersonalAccidentInsuranceService(
                 client,
-                JsonMapper.builder().build()
+                JsonMapper.builder().build(),
+                LOGOS
         );
 
         assertThatThrownBy(() ->
@@ -556,5 +572,196 @@ class PersonalAccidentInsuranceServiceTest {
                         26
                 ).isCoverAmountSupported()
         ).isTrue();
+    }
+
+    @Test
+    void shouldRejectNullCoverAmount() {
+        PolicyPlannerClient client = mock(PolicyPlannerClient.class);
+        var service = new PersonalAccidentInsuranceService(client, JsonMapper.builder().build(), LOGOS);
+
+        assertThatThrownBy(() -> service.fetch(new PersonalAccidentInsuranceRequest(null, 1, 26)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid cover amount");
+
+        verifyNoInteractions(client);
+    }
+
+    @Test
+    void shouldRejectMissingCategory() {
+        PolicyPlannerClient client = mock(PolicyPlannerClient.class);
+        var service = new PersonalAccidentInsuranceService(client, JsonMapper.builder().build(), LOGOS);
+
+        assertThatThrownBy(() -> service.fetch(new PersonalAccidentInsuranceRequest(1_000_000L, null, 26)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("category is required");
+
+        verifyNoInteractions(client);
+    }
+
+    @Test
+    void shouldRejectCategoryOutsideSupportedRange() {
+        PolicyPlannerClient client = mock(PolicyPlannerClient.class);
+        var service = new PersonalAccidentInsuranceService(client, JsonMapper.builder().build(), LOGOS);
+
+        for (Integer category : List.of(0, 4)) {
+            assertThatThrownBy(() -> service.fetch(new PersonalAccidentInsuranceRequest(1_000_000L, category, 26)))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("category must be one of: 1, 2, 3");
+        }
+
+        verifyNoInteractions(client);
+    }
+
+    @Test
+    void shouldRejectMinorAgeBeforeCallingVendor() {
+        PolicyPlannerClient client = mock(PolicyPlannerClient.class);
+        var service = new PersonalAccidentInsuranceService(client, JsonMapper.builder().build(), LOGOS);
+
+        assertThatThrownBy(() -> service.fetch(new PersonalAccidentInsuranceRequest(1_000_000L, 1, 17)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("age must be at least 18");
+
+        verifyNoInteractions(client);
+    }
+
+    @Test
+    void shouldAcceptCategoryBoundaries() {
+        PolicyPlannerClient client = mock(PolicyPlannerClient.class);
+        var service = new PersonalAccidentInsuranceService(client, JsonMapper.builder().build(), LOGOS);
+        var batch = new PersonalAccidentQuoteBatch(List.of(), List.of());
+        when(client.fetchPersonalAccidentQuoteBatch(any(PersonalAccidentVendorRequest.class))).thenReturn(batch);
+
+        assertThat(service.fetch(new PersonalAccidentInsuranceRequest(1_000_000L, 1, 18))).isSameAs(batch);
+        assertThat(service.fetch(new PersonalAccidentInsuranceRequest(1_000_000L, 3, 18))).isSameAs(batch);
+
+        verify(client).fetchPersonalAccidentQuoteBatch(new PersonalAccidentVendorRequest(1_000_000L, 1, 18));
+        verify(client).fetchPersonalAccidentQuoteBatch(new PersonalAccidentVendorRequest(1_000_000L, 3, 18));
+    }
+
+    @Test
+    void shouldDropPlanWhenPremiumsAreNull() {
+        var service = new PersonalAccidentInsuranceService(mock(PolicyPlannerClient.class), JsonMapper.builder().build(), LOGOS);
+        var q = new PersonalAccidentVendorResponse("Synthetic Insurer", "PA Plan", null, null, null, null,
+                1_000_000L, null, List.of(), null);
+
+        var res = service.build("req", new PersonalAccidentQuoteBatch(List.of(q), List.of()));
+
+        assertThat(res.insuranceType()).isEqualTo("PERSONAL_ACCIDENT");
+        assertThat(res.planCount()).isZero();
+        assertThat(res.plans()).isEmpty();
+    }
+
+    @Test
+    void shouldSkipInvalidPremiumEntriesAndDropPlanWhenNoneRemain() {
+        var service = new PersonalAccidentInsuranceService(mock(PolicyPlannerClient.class), JsonMapper.builder().build(), LOGOS);
+        var premiums = new ArrayList<PersonalAccidentVendorResponse.Premium>();
+        premiums.add(null);
+        premiums.add(new PersonalAccidentVendorResponse.Premium(null, new BigDecimal("100")));
+        premiums.add(new PersonalAccidentVendorResponse.Premium("   ", new BigDecimal("200")));
+        premiums.add(new PersonalAccidentVendorResponse.Premium("basic", null));
+        var q = new PersonalAccidentVendorResponse("Synthetic Insurer", "PA Plan", null, null, null, null,
+                1_000_000L, premiums, List.of(), null);
+
+        var res = service.build("req", new PersonalAccidentQuoteBatch(List.of(q), List.of()));
+
+        assertThat(res.planCount()).isZero();
+        assertThat(res.plans()).isEmpty();
+    }
+
+    @Test
+    void shouldIgnoreInvalidPremiumsAndNormalizeTypeCaseWhenDeduplicating() {
+        var service = new PersonalAccidentInsuranceService(mock(PolicyPlannerClient.class), JsonMapper.builder().build(), LOGOS);
+        var premiums = new ArrayList<PersonalAccidentVendorResponse.Premium>();
+        premiums.add(null);
+        premiums.add(new PersonalAccidentVendorResponse.Premium(" TTD ", new BigDecimal("900")));
+        premiums.add(new PersonalAccidentVendorResponse.Premium("ttd", new BigDecimal("950")));
+        premiums.add(new PersonalAccidentVendorResponse.Premium(" Basic ", new BigDecimal("400")));
+        premiums.add(new PersonalAccidentVendorResponse.Premium("basic", null));
+        var q = new PersonalAccidentVendorResponse("Synthetic Insurer", "PA Plan", null, null, null, null,
+                1_000_000L, premiums, null, null);
+
+        var plan = service.build("req", new PersonalAccidentQuoteBatch(List.of(q), List.of())).plans().getFirst();
+
+        assertThat(plan.premiumOptions()).extracting(p -> p.type()).containsExactly("TTD", "Basic");
+        assertThat(plan.premiumOptions()).extracting(p -> p.value())
+                .containsExactly(new BigDecimal("900"), new BigDecimal("400"));
+        assertThat(plan.premium().payablePremium()).isEqualByComparingTo("400");
+        // features == null: no ids and empty feature groups
+        assertThat(plan.company().companyId()).isNull();
+        assertThat(plan.plan().planId()).isNull();
+        assertThat(plan.includes()).isEmpty();
+        assertThat(plan.excludes()).isEmpty();
+        assertThat(plan.addons()).isEmpty();
+        assertThat(plan.features()).isEmpty();
+        assertThat(plan.otherDetails()).isEmpty();
+    }
+
+    @Test
+    void shouldSkipNullAndBlankFeaturesAndResolveIdsFromFirstFeatureWithAnyId() {
+        var service = new PersonalAccidentInsuranceService(mock(PolicyPlannerClient.class), JsonMapper.builder().build(), LOGOS);
+        var features = new ArrayList<PersonalAccidentVendorResponse.Feature>();
+        features.add(null);
+        features.add(new PersonalAccidentVendorResponse.Feature(null, null, "  ", null, "  "));
+        features.add(new PersonalAccidentVendorResponse.Feature(null, "PLAN-9", "Accidental Death", "War", "Hospital Cash"));
+        features.add(new PersonalAccidentVendorResponse.Feature("CO-1", "PLAN-1", " Accidental Death ", "War", null));
+        var q = new PersonalAccidentVendorResponse("Synthetic Insurer", "PA Plan", null, null, null, null,
+                1_000_000L, List.of(new PersonalAccidentVendorResponse.Premium("basic", new BigDecimal("500"))),
+                features, null);
+
+        var plan = service.build("req", new PersonalAccidentQuoteBatch(List.of(q), List.of())).plans().getFirst();
+
+        assertThat(plan.company().companyId()).isNull();
+        assertThat(plan.plan().planId()).isEqualTo("PLAN-9");
+        assertThat(plan.includes()).extracting(f -> f.title()).containsExactly("Accidental Death");
+        assertThat(plan.excludes()).extracting(f -> f.title()).containsExactly("War");
+        assertThat(plan.addons()).extracting(f -> f.title()).containsExactly("Hospital Cash");
+        assertThat(plan.features()).hasSize(3);
+    }
+
+    @Test
+    void shouldReturnNullIdsWhenNoFeatureCarriesIds() {
+        var service = new PersonalAccidentInsuranceService(mock(PolicyPlannerClient.class), JsonMapper.builder().build(), LOGOS);
+        var features = new ArrayList<PersonalAccidentVendorResponse.Feature>();
+        features.add(null);
+        features.add(new PersonalAccidentVendorResponse.Feature(null, null, "Accidental Death", null, null));
+        var q = new PersonalAccidentVendorResponse("Synthetic Insurer", "PA Plan", null, null, null, null,
+                1_000_000L, List.of(new PersonalAccidentVendorResponse.Premium("basic", new BigDecimal("500"))),
+                features, null);
+
+        var plan = service.build("req", new PersonalAccidentQuoteBatch(List.of(q), List.of())).plans().getFirst();
+
+        assertThat(plan.company().companyId()).isNull();
+        assertThat(plan.plan().planId()).isNull();
+        assertThat(plan.includes()).extracting(f -> f.title()).containsExactly("Accidental Death");
+    }
+
+    @Test
+    void shouldConvertMapOtherDetailsKeysToStrings() {
+        var service = new PersonalAccidentInsuranceService(mock(PolicyPlannerClient.class), JsonMapper.builder().build(), LOGOS);
+        var raw = new LinkedHashMap<Object, Object>();
+        raw.put(1, "one");
+        raw.put("Entry Age", "18 years");
+        var q = new PersonalAccidentVendorResponse("Synthetic Insurer", "PA Plan", null, null, null, raw,
+                1_000_000L, List.of(new PersonalAccidentVendorResponse.Premium("basic", new BigDecimal("500"))),
+                List.of(), null);
+
+        var plan = service.build("req", new PersonalAccidentQuoteBatch(List.of(q), List.of())).plans().getFirst();
+
+        assertThat(plan.otherDetails()).hasSize(2).containsEntry("1", "one").containsEntry("Entry Age", "18 years");
+    }
+
+    @Test
+    void shouldWrapNonStringNonMapOtherDetailsAndParseJsonString() {
+        var service = new PersonalAccidentInsuranceService(mock(PolicyPlannerClient.class), JsonMapper.builder().build(), LOGOS);
+        var premiums = List.of(new PersonalAccidentVendorResponse.Premium("basic", new BigDecimal("500")));
+        var numeric = new PersonalAccidentVendorResponse("Insurer A", "P1", null, null, null, 42,
+                1_000_000L, premiums, List.of(), null);
+        var json = new PersonalAccidentVendorResponse("Insurer B", "P2", null, null, null, "{\"Entry Age\":\"18\"}",
+                1_000_000L, premiums, List.of(), null);
+
+        var plans = service.build("req", new PersonalAccidentQuoteBatch(List.of(numeric, json), List.of())).plans();
+
+        assertThat(plans.get(0).otherDetails()).hasSize(1).containsEntry("details", 42);
+        assertThat(plans.get(1).otherDetails()).hasSize(1).containsEntry("Entry Age", "18");
     }
 }

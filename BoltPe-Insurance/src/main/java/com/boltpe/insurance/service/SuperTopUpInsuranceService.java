@@ -16,7 +16,8 @@ import tools.jackson.databind.json.JsonMapper;
 public class SuperTopUpInsuranceService {
     private final PolicyPlannerClient client;
     private final JsonMapper jsonMapper;
-    public SuperTopUpInsuranceService(PolicyPlannerClient client, JsonMapper jsonMapper) { this.client=client; this.jsonMapper=jsonMapper; }
+    private final InsurerLogoService logoService;
+    public SuperTopUpInsuranceService(PolicyPlannerClient client, JsonMapper jsonMapper, InsurerLogoService logoService) { this.client=client; this.jsonMapper=jsonMapper; this.logoService=logoService; }
 
     public SuperTopUpQuoteBatch fetch(SuperTopUpInsuranceRequest r) {
         if (r.coverAmount() == null || !SuperTopUpInsuranceRequest.ALLOWED_COVER_AMOUNTS.contains(r.coverAmount())) throw new IllegalArgumentException("Invalid cover amount. Please select a cover amount from the available coverage options.");
@@ -56,7 +57,7 @@ public class SuperTopUpInsuranceService {
                 null, null, null, null, decimal(vendorPremium.deductible()), vendorPremium.premium(), null, null);
 
         return new SuperTopUpInsuranceResponse.Plan(
-                new SuperTopUpInsuranceResponse.Company(q.companyId(),q.companyName(),q.logoUrl()),
+                new SuperTopUpInsuranceResponse.Company(q.companyId(),q.companyName(),logoService.resolveLogoUrl(q.companyId(),q.logoUrl())),
                 new SuperTopUpInsuranceResponse.PlanDetails(q.planId(),q.planName(),q.brochureUrl(),q.onePagerUrl()),
                 new SuperTopUpInsuranceResponse.Coverage(q.coverAmount(),null,q.adults(),q.children(),q.eldestActual(),q.eldestLookup()),
                 new SuperTopUpInsuranceResponse.Premium(null,null,null),
@@ -64,16 +65,18 @@ public class SuperTopUpInsuranceService {
                 List.copyOf(all), otherDetails(q.otherDetails()), includes.stream().limit(3).toList(), includes, excludes, addons,
                 null,null,List.of(option),true,"YEAR");
     }
-    private List<SuperTopUpInsuranceResponse.Feature> features(SuperTopUpVendorResponse q,String group) {
-        if(q.features()==null) return List.of(); LinkedHashMap<String,SuperTopUpInsuranceResponse.Feature> out=new LinkedHashMap<>();
-        for(var f:q.features()){ if(f==null)continue; String v=switch(group){case "INCLUDE"->f.includes();case "EXCLUDE"->f.excludes();default->f.addons();};
-            if(v!=null&&!v.isBlank()){v=v.trim();out.putIfAbsent(v,new SuperTopUpInsuranceResponse.Feature(group,v,v));}}
-        return List.copyOf(out.values());
+    private List<SuperTopUpInsuranceResponse.Feature> features(SuperTopUpVendorResponse quote, String group) {
+        return VendorFeatureSupport.features(quote.features(), group,
+                feature -> switch (group) {
+                    case "INCLUDE" -> feature.includes();
+                    case "EXCLUDE" -> feature.excludes();
+                    default -> feature.addons();
+                },
+                (category, title) -> new SuperTopUpInsuranceResponse.Feature(category, title, title));
     }
-    @SuppressWarnings("unchecked") private Map<String,Object> otherDetails(Object raw){
-        if(raw==null)return Map.of(); if(raw instanceof Map<?,?> m){Map<String,Object> r=new LinkedHashMap<>();m.forEach((k,v)->r.put(String.valueOf(k),v));return r;}
-        if(raw instanceof String s&&!s.isBlank()){try{return jsonMapper.readValue(s,Map.class);}catch(RuntimeException ignored){return Map.of("details",s);}}
-        return Map.of("details",raw);
+
+    private Map<String, Object> otherDetails(Object raw) {
+        return VendorFeatureSupport.otherDetails(raw, jsonMapper, true);
     }
     private BigDecimal decimal(String s){try{return s==null?null:new BigDecimal(s);}catch(NumberFormatException e){return null;}}
 }

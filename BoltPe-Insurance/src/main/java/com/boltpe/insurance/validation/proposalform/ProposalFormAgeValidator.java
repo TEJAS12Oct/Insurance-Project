@@ -28,6 +28,7 @@ public class ProposalFormAgeValidator {
 
     private final Clock clock;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public ProposalFormAgeValidator() {
         this(Clock.systemDefaultZone());
     }
@@ -39,73 +40,75 @@ public class ProposalFormAgeValidator {
     public void validate(GroupProposalRequest request) {
         Map<String, String> errors = new LinkedHashMap<>();
         LocalDate today = LocalDate.now(clock);
+        Integer selfAge = parseRequiredAdultAge(request.proposerDOB(), "proposerDOB", "Self", today, errors);
+        Integer spouseAge = validateAdults(request.adults(), selfAge, today, errors);
+        List<ChildAge> children = validateChildren(request.children(), selfAge, spouseAge, today, errors);
+        validateChildSequence(children, errors);
+        if (!errors.isEmpty()) {
+            throw new ProposalAgeValidationException(errors);
+        }
+    }
 
-        Integer selfAge = parseRequiredAdultAge(
-                request.proposerDOB(), "proposerDOB", "Self", today, errors);
-
+    private Integer validateAdults(List<AdultMemberRequest> adults, Integer selfAge,
+                                   LocalDate today, Map<String, String> errors) {
         Integer spouseAge = null;
-        List<AdultMemberRequest> adults = request.adults();
         for (int i = 0; i < adults.size(); i++) {
             AdultMemberRequest adult = adults.get(i);
-            if (adult == null) {
+            if (adult == null || normalize(adult.relationship()).isEmpty()) {
                 continue;
             }
             String relationship = normalize(adult.relationship());
-            if (relationship.isEmpty()) {
-                continue;
-            }
-
             String field = "adults[" + i + "].dob";
-            switch (relationship) {
-                case "self" -> parseRequiredAdultAge(adult.dob(), field, "Self", today, errors);
-                case "spouse" -> spouseAge = parseRequiredAdultAge(adult.dob(), field, "Spouse", today, errors);
-                case "father" -> {
-                    Integer fatherAge = parseRequiredAdultAge(adult.dob(), field, "Father", today, errors);
-                    if (fatherAge != null && selfAge != null && fatherAge - selfAge < PARENT_CHILD_MIN_GAP) {
-                        errors.put(field, "Father age must be at least 21 years greater than self age");
-                    }
-                }
-                case "mother" -> {
-                    Integer motherAge = parseRequiredAdultAge(adult.dob(), field, "Mother", today, errors);
-                    if (motherAge != null && selfAge != null && motherAge - selfAge < PARENT_CHILD_MIN_GAP) {
-                        errors.put(field, "Mother age must be at least 21 years greater than self age");
-                    }
-                }
-                default -> {
-                    // Other adult relationships are outside this PRD and are not age-gap validated here.
-                }
+            if ("spouse".equals(relationship)) {
+                spouseAge = parseRequiredAdultAge(adult.dob(), field, "Spouse", today, errors);
+            } else {
+                validateOtherAdult(adult, relationship, field, selfAge, today, errors);
             }
         }
+        return spouseAge;
+    }
 
-        List<ChildMemberRequest> children = request.children();
+    private void validateOtherAdult(AdultMemberRequest adult, String relationship, String field,
+                                    Integer selfAge, LocalDate today, Map<String, String> errors) {
+        switch (relationship) {
+            case "self" -> parseRequiredAdultAge(adult.dob(), field, "Self", today, errors);
+            case "father", "mother" -> validateParentAge(adult, relationship, field, selfAge, today, errors);
+            default -> { /* Only supported relationships require DOB checks here. */ }
+        }
+    }
+
+    private void validateParentAge(AdultMemberRequest adult, String relationship, String field,
+                                    Integer selfAge, LocalDate today, Map<String, String> errors) {
+        String label = "father".equals(relationship) ? "Father" : "Mother";
+        Integer parentAge = parseRequiredAdultAge(adult.dob(), field, label, today, errors);
+        if (parentAge != null && selfAge != null && parentAge - selfAge < PARENT_CHILD_MIN_GAP) {
+            errors.put(field, label + " age must be at least 21 years greater than self age");
+        }
+    }
+
+    private List<ChildAge> validateChildren(List<ChildMemberRequest> children, Integer selfAge,
+                                             Integer spouseAge, LocalDate today, Map<String, String> errors) {
         List<ChildAge> parsedChildren = new ArrayList<>();
-
         for (int i = 0; i < children.size(); i++) {
             ChildMemberRequest child = children.get(i);
-            if (child == null) {
-                continue;
-            }
-            String field = "children[" + i + "].dob";
-            Integer childAge = parseChildAge(child.dob(), field, today, errors);
-            if (childAge == null) {
-                continue;
-            }
-
-            parsedChildren.add(new ChildAge(i, childAge, field));
-
-            if (selfAge != null && selfAge - childAge < PARENT_CHILD_MIN_GAP) {
-                errors.put(field, "Self age must be at least 21 years greater than child age");
-                continue;
-            }
-            if (spouseAge != null && spouseAge - childAge < PARENT_CHILD_MIN_GAP) {
-                errors.put(field, "Spouse age must be at least 21 years greater than child age");
+            if (child != null) {
+                String field = "children[" + i + "].dob";
+                Integer childAge = parseChildAge(child.dob(), field, today, errors);
+                if (childAge != null) {
+                    parsedChildren.add(new ChildAge(i, childAge, field));
+                    validateChildParentGaps(childAge, selfAge, spouseAge, field, errors);
+                }
             }
         }
+        return parsedChildren;
+    }
 
-        validateChildSequence(parsedChildren, errors);
-
-        if (!errors.isEmpty()) {
-            throw new ProposalAgeValidationException(errors);
+    private void validateChildParentGaps(Integer childAge, Integer selfAge, Integer spouseAge,
+                                          String field, Map<String, String> errors) {
+        if (selfAge != null && selfAge - childAge < PARENT_CHILD_MIN_GAP) {
+            errors.put(field, "Self age must be at least 21 years greater than child age");
+        } else if (spouseAge != null && spouseAge - childAge < PARENT_CHILD_MIN_GAP) {
+            errors.put(field, "Spouse age must be at least 21 years greater than child age");
         }
     }
 
@@ -115,25 +118,16 @@ public class ProposalFormAgeValidator {
             for (int j = i + 1; j < children.size(); j++) {
                 ChildAge younger = children.get(j);
 
-                // Child 1 must be oldest and Child 4 youngest. Any later child being older is invalid.
+                // Child 1 must be oldest and Child 4 youngest.
                 if (younger.age() > older.age()) {
                     errors.putIfAbsent(younger.field(),
                             "Child ages must follow the sequence Child 1 >= Child 2 >= Child 3 >= Child 4");
-                    continue;
-                }
-
-                int difference = older.age() - younger.age();
-                int indexDistance = younger.index() - older.index();
-
-                // Same age is only allowed for adjacent child positions: C1/C2, C2/C3, C3/C4.
-                if (difference == 0 && indexDistance > 1) {
+                } else if (younger.age() == older.age()
+                        && younger.index() - older.index() > 1) {
+                    // Only adjacent child positions may share a completed age.
                     errors.putIfAbsent(younger.field(),
                             "Non-adjacent children cannot have the same age");
-                    continue;
                 }
-
-                // Completed ages are whole numbers. Once adjacent children have different ages,
-                // their difference is automatically at least one completed year.
             }
         }
     }

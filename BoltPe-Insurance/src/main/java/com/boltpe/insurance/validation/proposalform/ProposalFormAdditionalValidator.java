@@ -16,6 +16,18 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class ProposalFormAdditionalValidator {
+    private static final String FIELD_ADULT_COUNT = "adultCount";
+    private static final String FIELD_CHILD_COUNT = "childCount";
+    private static final String FIELD_SELECTED_TENURE = "selectedTenure";
+    private static final String FIELD_NRI_DISCOUNT = "nriDiscount";
+    private static final String FIELD_INCLUDE_SELF = "includeSelf";
+    private static final String FIELD_BUREAU_DISCOUNT = "bureauDiscount";
+    private static final String FIELD_ADULTS = "adults";
+    private static final String FIELD_CHILDREN = "children";
+    private static final String FIELD_COVER_AMOUNT = "coverAmount";
+    private static final String ZONE_REQUIRED = "zone is required";
+    private static final String WHOLE_NUMBER_MESSAGE = " must be a whole number";
+
     private static final BigDecimal ONE = BigDecimal.ONE;
     private static final BigDecimal MIN_HEIGHT = BigDecimal.valueOf(30);
     private static final BigDecimal MAX_HEIGHT = BigDecimal.valueOf(250);
@@ -53,14 +65,14 @@ public class ProposalFormAdditionalValidator {
     public void validateRawData(Map<String, Object> data) {
         Map<String, String> errors = new LinkedHashMap<>();
         validateRawZone(data, errors);
-        validateRawWholeNumber(data.get("adultCount"), "adultCount", errors);
-        validateRawWholeNumber(data.get("childCount"), "childCount", errors);
-        validateRawTenure(data.get("selectedTenure"), errors);
-        validateRawYesNo(data.get("nriDiscount"), "nriDiscount", errors);
-        validateRawYesNo(data.get("includeSelf"), "includeSelf", errors);
-        validateRawYesNo(data.get("bureauDiscount"), "bureauDiscount", errors);
-        validateRawMembers(data.get("adults"), "adults", errors);
-        validateRawMembers(data.get("children"), "children", errors);
+        validateRawWholeNumber(data.get(FIELD_ADULT_COUNT), FIELD_ADULT_COUNT, errors);
+        validateRawWholeNumber(data.get(FIELD_CHILD_COUNT), FIELD_CHILD_COUNT, errors);
+        validateRawTenure(data.get(FIELD_SELECTED_TENURE), errors);
+        validateRawYesNo(data.get(FIELD_NRI_DISCOUNT), FIELD_NRI_DISCOUNT, errors);
+        validateRawYesNo(data.get(FIELD_INCLUDE_SELF), FIELD_INCLUDE_SELF, errors);
+        validateRawYesNo(data.get(FIELD_BUREAU_DISCOUNT), FIELD_BUREAU_DISCOUNT, errors);
+        validateRawMembers(data.get(FIELD_ADULTS), FIELD_ADULTS, errors);
+        validateRawMembers(data.get(FIELD_CHILDREN), FIELD_CHILDREN, errors);
         throwIfInvalid(errors);
     }
 
@@ -71,7 +83,7 @@ public class ProposalFormAdditionalValidator {
      */
     public void validateRawCoverAmount(Map<String, Object> data, String insuranceType) {
         Map<String, String> errors = new LinkedHashMap<>();
-        String sourceField = "PERSONAL_ACCIDENT".equals(insuranceType) ? "coverAmount" : "sumInsured";
+        String sourceField = "PERSONAL_ACCIDENT".equals(insuranceType) ? FIELD_COVER_AMOUNT : "sumInsured";
         Object value = data.get(sourceField);
         validateCoverAmount(value, insuranceType, errors);
         throwIfInvalid(errors);
@@ -86,9 +98,9 @@ public class ProposalFormAdditionalValidator {
         validateZone(request.zone(), errors);
         validateCounts(request, errors);
         validateTenure(request.selectedTenure(), errors);
-        validateYesNo("nriDiscount", request.nriDiscount(), errors);
-        validateYesNo("includeSelf", request.includeSelf(), errors);
-        validateYesNo("bureauDiscount", request.bureauDiscount(), errors);
+        validateYesNo(FIELD_NRI_DISCOUNT, request.nriDiscount(), errors);
+        validateYesNo(FIELD_INCLUDE_SELF, request.includeSelf(), errors);
+        validateYesNo(FIELD_BUREAU_DISCOUNT, request.bureauDiscount(), errors);
         validateAdults(request.adults(), errors);
         validateChildren(request.children(), errors);
         throwIfInvalid(errors);
@@ -96,11 +108,11 @@ public class ProposalFormAdditionalValidator {
 
     private void validateCoverAmount(Object value, String insuranceType, Map<String, String> errors) {
         if (value == null) {
-            errors.put("coverAmount", "coverAmount is required");
+            errors.put(FIELD_COVER_AMOUNT, "coverAmount is required");
             return;
         }
         if (!(value instanceof Number)) {
-            errors.put("coverAmount", invalidCoverAmountMessage(insuranceType));
+            errors.put(FIELD_COVER_AMOUNT, invalidCoverAmountMessage(insuranceType));
             return;
         }
 
@@ -108,12 +120,12 @@ public class ProposalFormAdditionalValidator {
         try {
             amount = new BigDecimal(value.toString());
         } catch (RuntimeException ex) {
-            errors.put("coverAmount", invalidCoverAmountMessage(insuranceType));
+            errors.put(FIELD_COVER_AMOUNT, invalidCoverAmountMessage(insuranceType));
             return;
         }
 
         if (amount.signum() <= 0 || amount.stripTrailingZeros().scale() > 0) {
-            errors.put("coverAmount", invalidCoverAmountMessage(insuranceType));
+            errors.put(FIELD_COVER_AMOUNT, invalidCoverAmountMessage(insuranceType));
             return;
         }
 
@@ -121,7 +133,7 @@ public class ProposalFormAdditionalValidator {
         try {
             backendValue = amount.longValueExact();
         } catch (ArithmeticException ex) {
-            errors.put("coverAmount", invalidCoverAmountMessage(insuranceType));
+            errors.put(FIELD_COVER_AMOUNT, invalidCoverAmountMessage(insuranceType));
             return;
         }
 
@@ -134,7 +146,7 @@ public class ProposalFormAdditionalValidator {
         };
 
         if (!allowed.contains(backendValue)) {
-            errors.put("coverAmount", invalidCoverAmountMessage(insuranceType));
+            errors.put(FIELD_COVER_AMOUNT, invalidCoverAmountMessage(insuranceType));
         }
     }
 
@@ -144,13 +156,13 @@ public class ProposalFormAdditionalValidator {
 
     private void validateRawZone(Map<String, Object> data, Map<String, String> errors) {
         if (!data.containsKey("zone") || data.get("zone") == null) {
-            errors.put("zone", "zone is required");
+            errors.put("zone", ZONE_REQUIRED);
             return;
         }
 
         Object rawZone = data.get("zone");
         if (rawZone instanceof String zone && zone.isBlank()) {
-            errors.put("zone", "zone is required");
+            errors.put("zone", ZONE_REQUIRED);
             return;
         }
 
@@ -164,7 +176,7 @@ public class ProposalFormAdditionalValidator {
 
     private void validateZone(String zone, Map<String, String> errors) {
         if (zone == null || zone.isBlank()) {
-            errors.put("zone", "zone is required");
+            errors.put("zone", ZONE_REQUIRED);
         } else if (!ALLOWED_ZONES.contains(zone)) {
             errors.put("zone", "zone must be one of: 1, 2, 3");
         }
@@ -173,23 +185,23 @@ public class ProposalFormAdditionalValidator {
     private void validateRawWholeNumber(Object value, String field, Map<String, String> errors) {
         if (value == null) return; // Bean validation supplies the required message.
         if (!(value instanceof Number)) {
-            errors.put(field, field + " must be a whole number");
+            errors.put(field, field + WHOLE_NUMBER_MESSAGE);
             return;
         }
         try {
             BigDecimal number = new BigDecimal(value.toString());
             if (number.stripTrailingZeros().scale() > 0) {
-                errors.put(field, field + " must be a whole number");
+                errors.put(field, field + WHOLE_NUMBER_MESSAGE);
             }
         } catch (RuntimeException ex) {
-            errors.put(field, field + " must be a whole number");
+            errors.put(field, field + WHOLE_NUMBER_MESSAGE);
         }
     }
 
     private void validateRawTenure(Object value, Map<String, String> errors) {
         if (value == null) return;
         if (!(value instanceof Number)) {
-            errors.put("selectedTenure", "selectedTenure must be 1 year");
+            errors.put(FIELD_SELECTED_TENURE, "selectedTenure must be 1 year");
         }
     }
 
@@ -232,12 +244,12 @@ public class ProposalFormAdditionalValidator {
         if (adultCount != null) {
             if (adultCount < 1 || adultCount > 4) {
                 errors.put(
-                        "adultCount",
+                        FIELD_ADULT_COUNT,
                         "adultCount must be between 1 and 4"
                 );
             } else if (actualAdults != adultCount) {
                 errors.put(
-                        "adultCount",
+                        FIELD_ADULT_COUNT,
                         "adultCount must match the number of adult members"
                 );
             }
@@ -245,7 +257,7 @@ public class ProposalFormAdditionalValidator {
 
         if (actualAdults > 4) {
             errors.put(
-                    "adults",
+                    FIELD_ADULTS,
                     "Maximum 4 adult members are allowed"
             );
         }
@@ -265,12 +277,12 @@ public class ProposalFormAdditionalValidator {
             // Maximum total children = 4.
             if (childCount < 0 || childCount > 4) {
                 errors.put(
-                        "childCount",
+                        FIELD_CHILD_COUNT,
                         "childCount must be between 0 and 4"
                 );
             } else if (actualChildren != childCount) {
                 errors.put(
-                        "childCount",
+                        FIELD_CHILD_COUNT,
                         "childCount must match the number of child members"
                 );
             }
@@ -278,7 +290,7 @@ public class ProposalFormAdditionalValidator {
 
         if (actualChildren > 4) {
             errors.put(
-                    "children",
+                    FIELD_CHILDREN,
                     "Maximum 4 child members are allowed"
             );
         }
@@ -286,7 +298,7 @@ public class ProposalFormAdditionalValidator {
 
     private void validateTenure(BigDecimal tenure, Map<String, String> errors) {
         if (tenure != null && tenure.compareTo(ONE) != 0) {
-            errors.put("selectedTenure", "selectedTenure must be 1 year");
+            errors.put(FIELD_SELECTED_TENURE, "selectedTenure must be 1 year");
         }
     }
 

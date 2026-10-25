@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.boltpe.insurance.client.PolicyPlannerClient;
@@ -12,6 +13,7 @@ import com.boltpe.insurance.dto.request.SuperTopUpInsuranceRequest;
 import com.boltpe.insurance.vendor.request.SuperTopUpVendorRequest;
 import com.boltpe.insurance.vendor.response.SuperTopUpVendorResponse;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,12 +21,13 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
 class SuperTopUpInsuranceServiceTest {
+    private static final InsurerLogoService LOGOS = new InsurerLogoService("https://s3.example.test", "test-bucket", "publictpap", "insurancelogo");
     private PolicyPlannerClient client;
     private SuperTopUpInsuranceService service;
 
     @BeforeEach void setUp() {
         client = mock(PolicyPlannerClient.class);
-        service = new SuperTopUpInsuranceService(client, JsonMapper.builder().build());
+        service = new SuperTopUpInsuranceService(client, JsonMapper.builder().build(), LOGOS);
     }
 
     @Test void shouldFetchUsingVendorRequestWithoutZone() {
@@ -53,6 +56,7 @@ class SuperTopUpInsuranceServiceTest {
         var firstPlan = response.plans().get(0);
         var secondPlan = response.plans().get(1);
         assertThat(firstPlan.company().companyId()).isEqualTo("1005");
+        assertThat(firstPlan.company().logoUrl()).isEqualTo("https://s3.example.test/test-bucket/publictpap/insurancelogo/nic_1005.svg");
         assertThat(firstPlan.plan().planId()).isEqualTo("193");
         assertThat(secondPlan.plan().planId()).isEqualTo("193");
         assertThat(firstPlan.coverage().zone()).isNull();
@@ -90,6 +94,70 @@ class SuperTopUpInsuranceServiceTest {
         var plainResponse = service.build("r2", new SuperTopUpInsuranceRequest(1L,18,null,null,null,null,null),
                 new SuperTopUpQuoteBatch(List.of(plain), List.of()));
         assertThat(plainResponse.plans().getFirst().otherDetails()).containsEntry("details", "not-json");
+    }
+
+    @Test void shouldPreserveOtherDetailsFallbackForNullAndBlankValues() {
+        var request = new SuperTopUpInsuranceRequest(1000000L, 18, null, null, null, null, null);
+        var nullResponse = service.build("null-details", request,
+                new SuperTopUpQuoteBatch(List.of(quote(null, "500000", null)), List.of()));
+        assertThat(nullResponse.plans().getFirst().otherDetails()).isEmpty();
+
+        var blankResponse = service.build("blank-details", request,
+                new SuperTopUpQuoteBatch(List.of(quote(" ", "500000", null)), List.of()));
+        assertThat(blankResponse.plans().getFirst().otherDetails()).containsEntry("details", " ");
+    }
+
+    @Test void shouldRejectNullCoverAmountWithoutCallingVendor() {
+        var request = new SuperTopUpInsuranceRequest(null, 30, null, null, null, null, null);
+        assertThatThrownBy(() -> service.fetch(request)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid cover amount");
+        verifyNoInteractions(client);
+    }
+
+    @Test void shouldPropagateFamilyAgeValidationFailures() {
+        var request = new SuperTopUpInsuranceRequest(1000000L, 30, 16, null, null, null, null);
+        assertThatThrownBy(() -> service.fetch(request)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("spouse_age must be at least 18");
+        verifyNoInteractions(client);
+    }
+
+    @Test void shouldProduceNoPlansWhenPremiumsAreNullOrEmpty() {
+        var request = new SuperTopUpInsuranceRequest(1000000L, 18, null, null, null, null, null);
+        var nullPremiums = vendorQuote(null, List.of());
+        var emptyPremiums = vendorQuote(List.of(), List.of());
+        var response = service.build("r", request, new SuperTopUpQuoteBatch(List.of(nullPremiums, emptyPremiums), List.of()));
+        assertThat(response.planCount()).isZero();
+        assertThat(response.plans()).isEmpty();
+    }
+
+    @Test void shouldSkipNullPremiumsAndKeepNullDeductible() {
+        var premiums = new ArrayList<SuperTopUpVendorResponse.Premium>();
+        premiums.add(null);
+        premiums.add(new SuperTopUpVendorResponse.Premium(BigDecimal.valueOf(1200), null));
+        var response = service.build("r", new SuperTopUpInsuranceRequest(1000000L, 18, null, null, null, null, null),
+                new SuperTopUpQuoteBatch(List.of(vendorQuote(premiums, null)), List.of()));
+        assertThat(response.planCount()).isEqualTo(1);
+        var plan = response.plans().getFirst();
+        assertThat(plan.premiumOptions().getFirst().deductible()).isNull();
+        assertThat(plan.premiumOptions().getFirst().premium()).isEqualByComparingTo("1200");
+        assertThat(plan.members()).isEmpty();
+    }
+
+    @Test void shouldUpperCaseMemberLabelsAndKeepNullLabels() {
+        var members = List.of(new SuperTopUpVendorResponse.Member("spouse", 28),
+                new SuperTopUpVendorResponse.Member(null, 5));
+        var premiums = List.of(new SuperTopUpVendorResponse.Premium(BigDecimal.valueOf(1200), "300000"));
+        var plan = service.build("r", new SuperTopUpInsuranceRequest(1000000L, 30, 28, 5, null, null, null),
+                new SuperTopUpQuoteBatch(List.of(vendorQuote(premiums, members)), List.of())).plans().getFirst();
+        assertThat(plan.members()).extracting(m -> m.relation()).containsExactly("SPOUSE", null);
+        assertThat(plan.members()).extracting(m -> m.age()).containsExactly(28, 5);
+    }
+
+    private static SuperTopUpVendorResponse vendorQuote(List<SuperTopUpVendorResponse.Premium> premiums,
+                                                        List<SuperTopUpVendorResponse.Member> members) {
+        return new SuperTopUpVendorResponse("ok", null, "C-1", "P-1", "Synthetic Insurer", null,
+                null, null, "Synthetic Top Up", 1000000L, 1, 0, 30, 30,
+                premiums, members, null, null);
     }
 
     private static SuperTopUpVendorResponse quote(Object details, String firstDeductible, String secondDeductible) {

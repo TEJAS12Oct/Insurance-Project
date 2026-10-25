@@ -26,6 +26,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class PolicyPlannerProposalMapper {
+    private static final String FIELD_ANNUAL_INCOME = "annualIncome";
+
     private static final DateTimeFormatter BOLTPE_DATE =
             DateTimeFormatter.ofPattern("dd-MM-uuuu").withResolverStyle(ResolverStyle.STRICT);
     private static final DateTimeFormatter POLICY_PLANNER_DATE = DateTimeFormatter.ISO_LOCAL_DATE;
@@ -79,11 +81,11 @@ public class PolicyPlannerProposalMapper {
 
 
     private void mapAnnualIncomeSlab(Map<String, Object> body) {
-        if (!body.containsKey("annualIncome") || body.get("annualIncome") == null) {
+        if (!body.containsKey(FIELD_ANNUAL_INCOME) || body.get(FIELD_ANNUAL_INCOME) == null) {
             return;
         }
 
-        Object rawValue = body.get("annualIncome");
+        Object rawValue = body.get(FIELD_ANNUAL_INCOME);
         if (!(rawValue instanceof String slab) || slab.isBlank()) {
             throw new IllegalArgumentException("Invalid annualIncome slab");
         }
@@ -92,7 +94,7 @@ public class PolicyPlannerProposalMapper {
         if (mappedValue == null) {
             throw new IllegalArgumentException("Invalid annualIncome slab");
         }
-        body.put("annualIncome", mappedValue);
+        body.put(FIELD_ANNUAL_INCOME, mappedValue);
     }
 
     private void normalizeIndianMobile(Map<String, Object> body, String field) {

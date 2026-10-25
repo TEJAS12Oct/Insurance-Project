@@ -2,7 +2,10 @@ package com.boltpe.insurance.client;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.boltpe.insurance.config.PolicyPlannerProperties;
@@ -24,6 +27,7 @@ import com.boltpe.insurance.vendor.response.HospitalCashDiscoveryResponse;
 import com.boltpe.insurance.vendor.response.HospitalCashPlanApiDescriptor;
 import com.boltpe.insurance.vendor.response.HospitalCashVendorResponse;
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -1329,6 +1333,491 @@ class PolicyPlannerClientTest {
                 );
     }
 
+    // =========================================================
+    // HEALTH - edge cases
+    // =========================================================
+
+    @Test
+    void shouldSkipNullHealthApiTypeAndFallBackToUrlIdsWhenResponseIdsBlank() {
+        when(gateway.discoverHealthPlans(
+                "/health-insurance/companies/plans?policy=Health"))
+                .thenReturn(new HealthDiscoveryResponse(
+                        true,
+                        2,
+                        "Health",
+                        List.of(
+                                new HealthPlanApiDescriptor(null),
+                                new HealthPlanApiDescriptor("/health-insurance/care/1002/202/premium")
+                        )
+                ));
+
+        when(gateway.fetchHealthQuote(
+                "/health-insurance/care/1002/202/premium",
+                request))
+                .thenReturn(healthResponse(null, " "));
+
+        HealthQuoteBatch batch = client.fetchHealthQuoteBatch(request);
+
+        assertThat(batch.quotes()).hasSize(1);
+        assertThat(batch.apiStatuses())
+                .singleElement()
+                .satisfies(status -> {
+                    assertThat(status.active()).isTrue();
+                    assertThat(status.companyId()).isEqualTo("1002");
+                    assertThat(status.planId()).isEqualTo("202");
+                    assertThat(status.failureReason()).isNull();
+                });
+    }
+
+    @Test
+    void shouldFailWhenHealthDiscoveryResponseIsNull() {
+        when(gateway.discoverHealthPlans(
+                "/health-insurance/companies/plans?policy=Health"))
+                .thenReturn(null);
+
+        assertThatThrownBy(() -> client.fetchHealthQuoteBatch(request))
+                .isInstanceOf(PolicyPlannerException.class)
+                .hasMessage("Policy Planner returned no health plan APIs");
+    }
+
+    @Test
+    void shouldLeaveHealthIdsNullWhenUrlHasNoUsablePremiumSegment() {
+        var noPremiumSegment = new HealthPlanApiDescriptor("/health-insurance/care/1002/202/quote");
+        var premiumTooEarly = new HealthPlanApiDescriptor("premium/1002");
+
+        when(gateway.discoverHealthPlans(
+                "/health-insurance/companies/plans?policy=Health"))
+                .thenReturn(new HealthDiscoveryResponse(
+                        true,
+                        2,
+                        "Health",
+                        List.of(noPremiumSegment, premiumTooEarly)
+                ));
+
+        when(gateway.fetchHealthQuote(any(), any()))
+                .thenThrow(new RuntimeException("not found"));
+
+        HealthQuoteBatch batch = client.fetchHealthQuoteBatch(request);
+
+        assertThat(batch.quotes()).isEmpty();
+        assertThat(batch.apiStatuses())
+                .hasSize(2)
+                .allSatisfy(status -> {
+                    assertThat(status.active()).isFalse();
+                    assertThat(status.companyId()).isNull();
+                    assertThat(status.planId()).isNull();
+                    assertThat(status.failureReason()).isEqualTo("not found");
+                });
+    }
+
+    @Test
+    void shouldReportOpaqueAndMalformedHealthUrlsAsFailedWithoutCallingVendor() {
+        var opaque = new HealthPlanApiDescriptor("urn:policyplanner:premium");
+        var malformed = new HealthPlanApiDescriptor("/health-insurance/bad plan/1002/202/premium");
+
+        when(gateway.discoverHealthPlans(
+                "/health-insurance/companies/plans?policy=Health"))
+                .thenReturn(new HealthDiscoveryResponse(
+                        true,
+                        2,
+                        "Health",
+                        List.of(opaque, malformed)
+                ));
+
+        HealthQuoteBatch batch = client.fetchHealthQuoteBatch(request);
+
+        assertThat(batch.quotes()).isEmpty();
+        assertThat(batch.apiStatuses()).hasSize(2);
+
+        var opaqueStatus = batch.apiStatuses().get(0);
+        assertThat(opaqueStatus.active()).isFalse();
+        assertThat(opaqueStatus.companyId()).isNull();
+        assertThat(opaqueStatus.planId()).isNull();
+        assertThat(opaqueStatus.failureReason())
+                .isEqualTo("Rejected Policy Planner premium URL outside configured vendor host");
+
+        var malformedStatus = batch.apiStatuses().get(1);
+        assertThat(malformedStatus.active()).isFalse();
+        assertThat(malformedStatus.companyId()).isNull();
+        assertThat(malformedStatus.planId()).isNull();
+        assertThat(malformedStatus.failureReason()).startsWith("Illegal character");
+
+        verify(gateway, never()).fetchHealthQuote(any(), any());
+    }
+
+    @Test
+    void shouldDeriveFailureReasonFromCauseOrExceptionTypeWhenMessageMissing() {
+        var causeMessage = new HealthPlanApiDescriptor("/health-insurance/a/1001/101/premium");
+        var blankMessage = new HealthPlanApiDescriptor("/health-insurance/b/1002/102/premium");
+        var causeWithoutMessage = new HealthPlanApiDescriptor("/health-insurance/c/1003/103/premium");
+        var causeWithBlankMessage = new HealthPlanApiDescriptor("/health-insurance/d/1004/104/premium");
+
+        when(gateway.discoverHealthPlans(
+                "/health-insurance/companies/plans?policy=Health"))
+                .thenReturn(new HealthDiscoveryResponse(
+                        true,
+                        4,
+                        "Health",
+                        List.of(causeMessage, blankMessage, causeWithoutMessage, causeWithBlankMessage)
+                ));
+
+        when(gateway.fetchHealthQuote("/health-insurance/a/1001/101/premium", request))
+                .thenThrow(new RuntimeException(null, new IllegalStateException("upstream 503")));
+        when(gateway.fetchHealthQuote("/health-insurance/b/1002/102/premium", request))
+                .thenThrow(new RuntimeException(" "));
+        when(gateway.fetchHealthQuote("/health-insurance/c/1003/103/premium", request))
+                .thenThrow(new IllegalStateException(null, new RuntimeException((String) null)));
+        when(gateway.fetchHealthQuote("/health-insurance/d/1004/104/premium", request))
+                .thenThrow(new UnsupportedOperationException(null, new RuntimeException("  ")));
+
+        HealthQuoteBatch batch = client.fetchHealthQuoteBatch(request);
+
+        assertThat(batch.apiStatuses())
+                .extracting(HealthQuoteBatch.ApiStatus::failureReason)
+                .containsExactly(
+                        "upstream 503",
+                        "RuntimeException",
+                        "IllegalStateException",
+                        "UnsupportedOperationException"
+                );
+        assertThat(batch.apiStatuses())
+                .extracting(HealthQuoteBatch.ApiStatus::companyId)
+                .containsExactly("1001", "1002", "1003", "1004");
+    }
+
+    // =========================================================
+    // URL VALIDATION - scheme and port
+    // =========================================================
+
+    @Test
+    void shouldRejectAbsoluteUrlWithDifferentScheme() {
+        assertThatThrownBy(() ->
+                client.validateAndNormalizeVendorUrl(
+                        "http://policyplanner.com/health-insurance/icici/1009/191/premium"))
+                .isInstanceOf(PolicyPlannerException.class)
+                .hasMessageContaining("outside configured vendor host");
+    }
+
+    @Test
+    void shouldRejectAbsoluteUrlWithDifferentPort() {
+        assertThatThrownBy(() ->
+                client.validateAndNormalizeVendorUrl(
+                        "https://policyplanner.com:8443/health-insurance/icici/1009/191/premium"))
+                .isInstanceOf(PolicyPlannerException.class)
+                .hasMessageContaining("outside configured vendor host");
+    }
+
+    @Test
+    void shouldAcceptExplicitDefaultHttpsPort() {
+        assertThat(client.validateAndNormalizeVendorUrl(
+                "https://policyplanner.com:443/health-insurance/icici/1009/191/premium"))
+                .isEqualTo("/health-insurance/icici/1009/191/premium");
+    }
+
+    @Test
+    void shouldApplyDefaultHttpPortForHttpBaseUrl() {
+        var httpClient = new PolicyPlannerClient(gateway, properties("http://policyplanner.test"));
+
+        assertThat(httpClient.validateAndNormalizeVendorUrl(
+                "http://policyplanner.test:80/health-insurance/icici/1009/191/premium?a=1"))
+                .isEqualTo("/health-insurance/icici/1009/191/premium?a=1");
+
+        assertThatThrownBy(() ->
+                httpClient.validateAndNormalizeVendorUrl(
+                        "http://policyplanner.test:8080/health-insurance/icici/1009/191/premium"))
+                .isInstanceOf(PolicyPlannerException.class);
+    }
+
+    // =========================================================
+    // SUPER TOP UP - edge cases
+    // =========================================================
+
+    @Test
+    void shouldSkipNullOrBlankSuperTopUpApiTypeAndHandleNullResponseBlankErrorAndMissingPremiums() {
+        var stuRequest = new SuperTopUpVendorRequest(1000000L, 18, null, null, null, null, null);
+
+        when(gateway.discoverSuperTopUpPlans(
+                "/health-insurance/companies/plans?policy=super_top_up"))
+                .thenReturn(new SuperTopUpDiscoveryResponse(
+                        true,
+                        6,
+                        "super_top_up",
+                        List.of(
+                                new SuperTopUpPlanApiDescriptor(null),
+                                new SuperTopUpPlanApiDescriptor(" "),
+                                new SuperTopUpPlanApiDescriptor("/health-insurance/a/1001/101/supertopup"),
+                                new SuperTopUpPlanApiDescriptor("/health-insurance/b/1002/102/supertopup"),
+                                new SuperTopUpPlanApiDescriptor("/health-insurance/c/1003/103/supertopup"),
+                                new SuperTopUpPlanApiDescriptor("/health-insurance/d/1004/104/supertopup")
+                        )
+                ));
+
+        when(gateway.fetchSuperTopUpQuote("/health-insurance/a/1001/101/supertopup", stuRequest))
+                .thenReturn(null);
+        when(gateway.fetchSuperTopUpQuote("/health-insurance/b/1002/102/supertopup", stuRequest))
+                .thenReturn(superTopUpResponse(null, List.of()));
+        when(gateway.fetchSuperTopUpQuote("/health-insurance/c/1003/103/supertopup", stuRequest))
+                .thenReturn(superTopUpResponse(null, null));
+        when(gateway.fetchSuperTopUpQuote("/health-insurance/d/1004/104/supertopup", stuRequest))
+                .thenReturn(superTopUpResponse(" ", List.of(
+                        new SuperTopUpVendorResponse.Premium(BigDecimal.valueOf(1200), "300000"))));
+
+        var batch = client.fetchSuperTopUpQuoteBatch(stuRequest);
+
+        assertThat(batch.quotes()).hasSize(1);
+        assertThat(batch.apiStatuses())
+                .extracting(SuperTopUpQuoteBatch.ApiStatus::active)
+                .containsExactly(false, false, false, true);
+        assertThat(batch.apiStatuses())
+                .extracting(SuperTopUpQuoteBatch.ApiStatus::failureReason)
+                .containsExactly("No premiums found", "No premiums found", "No premiums found", null);
+        assertThat(batch.apiStatuses().getFirst().companyId()).isEqualTo("1001");
+        assertThat(batch.apiStatuses().getFirst().planId()).isEqualTo("101");
+    }
+
+    @Test
+    void shouldLeaveSuperTopUpIdsNullForMarkerTooEarlyAndMalformedUrls() {
+        var stuRequest = new SuperTopUpVendorRequest(1000000L, 18, null, null, null, null, null);
+
+        when(gateway.discoverSuperTopUpPlans(
+                "/health-insurance/companies/plans?policy=super_top_up"))
+                .thenReturn(new SuperTopUpDiscoveryResponse(
+                        true,
+                        2,
+                        "super_top_up",
+                        List.of(
+                                new SuperTopUpPlanApiDescriptor("supertopup/1005"),
+                                new SuperTopUpPlanApiDescriptor("/health-insurance/bad plan/1005/193/supertopup")
+                        )
+                ));
+
+        when(gateway.fetchSuperTopUpQuote("/supertopup/1005", stuRequest))
+                .thenThrow(new RuntimeException("timeout"));
+
+        var batch = client.fetchSuperTopUpQuoteBatch(stuRequest);
+
+        assertThat(batch.quotes()).isEmpty();
+        assertThat(batch.apiStatuses())
+                .hasSize(2)
+                .allSatisfy(status -> {
+                    assertThat(status.active()).isFalse();
+                    assertThat(status.companyId()).isNull();
+                    assertThat(status.planId()).isNull();
+                });
+        assertThat(batch.apiStatuses().get(0).failureReason()).isEqualTo("timeout");
+        assertThat(batch.apiStatuses().get(1).failureReason()).startsWith("Illegal character");
+    }
+
+    @Test
+    void shouldFailSuperTopUpWhenDiscoveryNullOrUnsuccessful() {
+        var stuRequest = new SuperTopUpVendorRequest(1000000L, 18, null, null, null, null, null);
+
+        when(gateway.discoverSuperTopUpPlans(
+                "/health-insurance/companies/plans?policy=super_top_up"))
+                .thenReturn(null);
+
+        assertThatThrownBy(() -> client.fetchSuperTopUpQuoteBatch(stuRequest))
+                .isInstanceOf(PolicyPlannerException.class)
+                .hasMessage("Policy Planner returned no Super Top-Up plan APIs");
+
+        when(gateway.discoverSuperTopUpPlans(
+                "/health-insurance/companies/plans?policy=super_top_up"))
+                .thenReturn(new SuperTopUpDiscoveryResponse(
+                        false,
+                        1,
+                        "super_top_up",
+                        List.of(new SuperTopUpPlanApiDescriptor("/health-insurance/a/1001/101/supertopup"))
+                ));
+
+        assertThatThrownBy(() -> client.fetchSuperTopUpQuoteBatch(stuRequest))
+                .isInstanceOf(PolicyPlannerException.class)
+                .hasMessage("Policy Planner returned no Super Top-Up plan APIs");
+    }
+
+    // =========================================================
+    // PERSONAL ACCIDENT - edge cases
+    // =========================================================
+
+    @Test
+    void shouldHandlePersonalAccidentNullApiTypeBlankErrorAndMissingPremiums() {
+        var paRequest = new PersonalAccidentVendorRequest(1_000_000L, 2, 26);
+
+        when(gateway.discoverPersonalAccidentPlans(
+                "/health-insurance/companies/plans?policy=pa"))
+                .thenReturn(new PersonalAccidentDiscoveryResponse(
+                        true,
+                        4,
+                        "pa",
+                        List.of(
+                                new PersonalAccidentPlanApiDescriptor(null),
+                                new PersonalAccidentPlanApiDescriptor("/health-insurance/a/1001/101/pa"),
+                                new PersonalAccidentPlanApiDescriptor("/health-insurance/b/1002/102/pa"),
+                                new PersonalAccidentPlanApiDescriptor("/health-insurance/c/1003/103/pa")
+                        )
+                ));
+
+        when(gateway.fetchPersonalAccidentQuote("/health-insurance/a/1001/101/pa", paRequest))
+                .thenReturn(personalAccidentResponse(null, List.of()));
+        when(gateway.fetchPersonalAccidentQuote("/health-insurance/b/1002/102/pa", paRequest))
+                .thenReturn(personalAccidentResponse(null, null));
+        when(gateway.fetchPersonalAccidentQuote("/health-insurance/c/1003/103/pa", paRequest))
+                .thenReturn(personalAccidentResponse(" ", List.of(
+                        new PersonalAccidentVendorResponse.Premium("basic", BigDecimal.valueOf(450)))));
+
+        var batch = client.fetchPersonalAccidentQuoteBatch(paRequest);
+
+        assertThat(batch.quotes()).hasSize(1);
+        assertThat(batch.apiStatuses())
+                .extracting(PersonalAccidentQuoteBatch.ApiStatus::active)
+                .containsExactly(false, false, true);
+        assertThat(batch.apiStatuses())
+                .extracting(PersonalAccidentQuoteBatch.ApiStatus::reason)
+                .containsExactly("No premiums found", "No premiums found", null);
+        assertThat(batch.apiStatuses().get(2).companyId()).isEqualTo("1003");
+        assertThat(batch.apiStatuses().get(2).planId()).isEqualTo("103");
+    }
+
+    @Test
+    void shouldLeavePersonalAccidentIdsNullForMarkerTooEarlyAndMalformedUrls() {
+        var paRequest = new PersonalAccidentVendorRequest(1_000_000L, 2, 26);
+
+        when(gateway.discoverPersonalAccidentPlans(
+                "/health-insurance/companies/plans?policy=pa"))
+                .thenReturn(new PersonalAccidentDiscoveryResponse(
+                        true,
+                        2,
+                        "pa",
+                        List.of(
+                                new PersonalAccidentPlanApiDescriptor("pa/1003"),
+                                new PersonalAccidentPlanApiDescriptor("/health-insurance/bad plan/1003/227/pa")
+                        )
+                ));
+
+        when(gateway.fetchPersonalAccidentQuote("/pa/1003", paRequest))
+                .thenThrow(new RuntimeException("timeout"));
+
+        var batch = client.fetchPersonalAccidentQuoteBatch(paRequest);
+
+        assertThat(batch.quotes()).isEmpty();
+        assertThat(batch.apiStatuses())
+                .hasSize(2)
+                .allSatisfy(status -> {
+                    assertThat(status.active()).isFalse();
+                    assertThat(status.companyId()).isNull();
+                    assertThat(status.planId()).isNull();
+                });
+        assertThat(batch.apiStatuses().get(0).reason()).isEqualTo("timeout");
+        assertThat(batch.apiStatuses().get(1).reason()).startsWith("Illegal character");
+    }
+
+    @Test
+    void shouldFailPersonalAccidentWhenDiscoveryNull() {
+        var paRequest = new PersonalAccidentVendorRequest(1_000_000L, 2, 26);
+
+        when(gateway.discoverPersonalAccidentPlans(
+                "/health-insurance/companies/plans?policy=pa"))
+                .thenReturn(null);
+
+        assertThatThrownBy(() -> client.fetchPersonalAccidentQuoteBatch(paRequest))
+                .isInstanceOf(PolicyPlannerException.class)
+                .hasMessage("Policy Planner returned no Personal Accident plan APIs");
+    }
+
+    // =========================================================
+    // HOSPITAL CASH - edge cases
+    // =========================================================
+
+    @Test
+    void shouldHandleHospitalCashNullApiTypeBlankErrorAndUnusableIds() {
+        var hcRequest = new HospitalCashVendorRequest(26, 3000L, 1, 0, 30);
+
+        when(gateway.discoverHospitalCashPlans(
+                "/health-insurance/companies/plans?policy=hc"))
+                .thenReturn(new HospitalCashDiscoveryResponse(
+                        true,
+                        4,
+                        "hc",
+                        List.of(
+                                new HospitalCashPlanApiDescriptor(null),
+                                new HospitalCashPlanApiDescriptor("/hc/1017"),
+                                new HospitalCashPlanApiDescriptor("/health-insurance/generali/1017/224/quote"),
+                                new HospitalCashPlanApiDescriptor("/health-insurance/bad plan/1017/224/hc")
+                        )
+                ));
+
+        when(gateway.fetchHospitalCashQuote("/hc/1017", hcRequest))
+                .thenReturn(hospitalCashResponse(" ", BigDecimal.valueOf(2078)));
+        when(gateway.fetchHospitalCashQuote("/health-insurance/generali/1017/224/quote", hcRequest))
+                .thenThrow(new RuntimeException("timeout"));
+
+        var batch = client.fetchHospitalCashQuoteBatch(hcRequest);
+
+        assertThat(batch.quotes()).hasSize(1);
+        assertThat(batch.apiStatuses())
+                .hasSize(3)
+                .allSatisfy(status -> {
+                    assertThat(status.companyId()).isNull();
+                    assertThat(status.planId()).isNull();
+                });
+        assertThat(batch.apiStatuses())
+                .extracting(HospitalCashQuoteBatch.ApiStatus::active)
+                .containsExactly(true, false, false);
+        assertThat(batch.apiStatuses().get(0).reason()).isNull();
+        assertThat(batch.apiStatuses().get(1).reason()).isEqualTo("timeout");
+        assertThat(batch.apiStatuses().get(2).reason()).startsWith("Illegal character");
+    }
+
+    @Test
+    void shouldFailHospitalCashWhenDiscoveryNull() {
+        var hcRequest = new HospitalCashVendorRequest(26, 3000L, 1, 0, 30);
+
+        when(gateway.discoverHospitalCashPlans(
+                "/health-insurance/companies/plans?policy=hc"))
+                .thenReturn(null);
+
+        assertThatThrownBy(() -> client.fetchHospitalCashQuoteBatch(hcRequest))
+                .isInstanceOf(PolicyPlannerException.class)
+                .hasMessage("Policy Planner returned no Hospital Cash plan APIs");
+    }
+
+    private static PolicyPlannerProperties properties(String baseUrl) {
+        return new PolicyPlannerProperties(
+                baseUrl,
+                new PolicyPlannerProperties.Health("/health-insurance/companies/plans?policy=Health"),
+                new PolicyPlannerProperties.SuperTopUp("/health-insurance/companies/plans?policy=super_top_up"),
+                new PolicyPlannerProperties.PersonalAccident("/health-insurance/companies/plans?policy=pa"),
+                new PolicyPlannerProperties.HospitalCash("/health-insurance/companies/plans?policy=hc"),
+                1000,
+                1000
+        );
+    }
+
+    private static HealthVendorResponse healthResponse(String companyId, String planId) {
+        return new HealthVendorResponse(
+                "ok",
+                companyId,
+                planId,
+                "Care Health Plan",
+                1000000L,
+                1,
+                1,
+                0,
+                30,
+                30,
+                BigDecimal.valueOf(9980),
+                BigDecimal.valueOf(9980),
+                BigDecimal.ZERO,
+                List.of(),
+                null,
+                null,
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of()
+        );
+    }
+
     private static HospitalCashVendorResponse hospitalCashResponse(
             String error,
             BigDecimal premium
@@ -1432,5 +1921,75 @@ class PolicyPlannerClientTest {
                 List.of(),
                 List.of()
         );
+    }
+
+    // Discovery records normally drop null entries, so mocked records are used to verify the client's own null guards.
+    @Test
+    void shouldSkipNullHealthDescriptorReturnedByDiscovery() {
+        var discovery = mock(HealthDiscoveryResponse.class);
+        when(discovery.success()).thenReturn(true);
+        when(discovery.data()).thenReturn(Arrays.asList((HealthPlanApiDescriptor) null));
+        when(gateway.discoverHealthPlans("/health-insurance/companies/plans?policy=Health")).thenReturn(discovery);
+
+        var batch = client.fetchHealthQuoteBatch(request);
+
+        assertThat(batch.quotes()).isEmpty();
+        assertThat(batch.apiStatuses()).isEmpty();
+        verify(gateway, never()).fetchHealthQuote(any(), any());
+    }
+
+    @Test
+    void shouldRejectHealthDiscoveryWithNullData() {
+        var discovery = mock(HealthDiscoveryResponse.class);
+        when(discovery.success()).thenReturn(true);
+        when(discovery.data()).thenReturn(null);
+        when(gateway.discoverHealthPlans("/health-insurance/companies/plans?policy=Health")).thenReturn(discovery);
+
+        assertThatThrownBy(() -> client.fetchHealthQuoteBatch(request))
+                .isInstanceOf(PolicyPlannerException.class)
+                .hasMessage("Policy Planner returned no health plan APIs");
+        verify(gateway, never()).fetchHealthQuote(any(), any());
+    }
+
+    @Test
+    void shouldSkipNullSuperTopUpDescriptorReturnedByDiscovery() {
+        var discovery = mock(SuperTopUpDiscoveryResponse.class);
+        when(discovery.success()).thenReturn(true);
+        when(discovery.data()).thenReturn(Arrays.asList((SuperTopUpPlanApiDescriptor) null));
+        when(gateway.discoverSuperTopUpPlans("/health-insurance/companies/plans?policy=super_top_up")).thenReturn(discovery);
+
+        var batch = client.fetchSuperTopUpQuoteBatch(mock(SuperTopUpVendorRequest.class));
+
+        assertThat(batch.quotes()).isEmpty();
+        assertThat(batch.apiStatuses()).isEmpty();
+        verify(gateway, never()).fetchSuperTopUpQuote(any(), any());
+    }
+
+    @Test
+    void shouldSkipNullPersonalAccidentDescriptorReturnedByDiscovery() {
+        var discovery = mock(PersonalAccidentDiscoveryResponse.class);
+        when(discovery.success()).thenReturn(true);
+        when(discovery.data()).thenReturn(Arrays.asList((PersonalAccidentPlanApiDescriptor) null));
+        when(gateway.discoverPersonalAccidentPlans("/health-insurance/companies/plans?policy=pa")).thenReturn(discovery);
+
+        var batch = client.fetchPersonalAccidentQuoteBatch(mock(PersonalAccidentVendorRequest.class));
+
+        assertThat(batch.quotes()).isEmpty();
+        assertThat(batch.apiStatuses()).isEmpty();
+        verify(gateway, never()).fetchPersonalAccidentQuote(any(), any());
+    }
+
+    @Test
+    void shouldSkipNullHospitalCashDescriptorReturnedByDiscovery() {
+        var discovery = mock(HospitalCashDiscoveryResponse.class);
+        when(discovery.success()).thenReturn(true);
+        when(discovery.data()).thenReturn(Arrays.asList((HospitalCashPlanApiDescriptor) null));
+        when(gateway.discoverHospitalCashPlans("/health-insurance/companies/plans?policy=hc")).thenReturn(discovery);
+
+        var batch = client.fetchHospitalCashQuoteBatch(mock(HospitalCashVendorRequest.class));
+
+        assertThat(batch.quotes()).isEmpty();
+        assertThat(batch.apiStatuses()).isEmpty();
+        verify(gateway, never()).fetchHospitalCashQuote(any(), any());
     }
 }

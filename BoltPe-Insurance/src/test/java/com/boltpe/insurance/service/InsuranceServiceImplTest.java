@@ -107,4 +107,106 @@ class InsuranceServiceImplTest {
                 .hasMessage("invalid health request");
         verifyNoInteractions(auditService);
     }
+
+    @Test void shouldRejectPersonalAccidentWhenProductServiceMissing() {
+        var request = new InsuranceRequest(InsuranceType.PERSONAL_ACCIDENT, Map.of("userId","USR001"),
+                Map.<String, Object>of("coverAmount", 1_000_000L, "category", 1, "age", 35));
+        assertThatThrownBy(() -> service.getQuotes(request)).isInstanceOf(UnsupportedInsuranceTypeException.class)
+                .hasMessageContaining("PERSONAL_ACCIDENT");
+        verifyNoInteractions(auditService, healthService);
+    }
+
+    @Test void shouldRejectHospitalCashWhenProductServiceMissing() {
+        var request = new InsuranceRequest(InsuranceType.HOSPITAL_CASH, Map.of("userId","USR001"),
+                Map.<String, Object>of("coverAmount", 1000L, "age", 35));
+        assertThatThrownBy(() -> service.getQuotes(request)).isInstanceOf(UnsupportedInsuranceTypeException.class)
+                .hasMessageContaining("HOSPITAL_CASH");
+        verifyNoInteractions(auditService, healthService);
+    }
+
+    @Test void shouldRejectRequestWithoutInsuranceType() {
+        var request = new InsuranceRequest(null, Map.of("userId","USR001"),
+                new HealthInsuranceRequest(1000000L,"1",30,null,null,null,null,null));
+        assertThatThrownBy(() -> service.getQuotes(request)).isInstanceOf(UnsupportedInsuranceTypeException.class)
+                .hasMessage("Insurance type is not implemented in this release");
+        verifyNoInteractions(auditService, healthService);
+    }
+
+    @Test void shouldStore500ResponseWhenHealthFetchFailsUnexpectedly() {
+        var request = healthRequest(1000000L);
+        var cause = new IllegalStateException("unexpected client state");
+        when(healthService.fetch(any())).thenThrow(cause);
+        assertThatThrownBy(() -> service.getQuotes(request)).isInstanceOf(BoltPeInsuranceException.class)
+                .hasCause(cause)
+                .satisfies(ex -> assertThat(((BoltPeInsuranceException) ex).apiError().status()).isEqualTo(500));
+        verify(auditService).save(anyString(), eq("HEALTH"), contains("USR001"), contains("HEALTH"),
+                eq("[]"), eq("[]"), eq("[]"), contains("BoltPe Insurance service encountered an unexpected error"));
+        verify(healthService, never()).build(anyString(), any(), any());
+    }
+
+    @Test void shouldSeparateActiveAndFailedApisWhenNoHealthQuoteIsReturned() {
+        var request = healthRequest(1000000L);
+        var statuses = List.of(
+                new HealthQuoteBatch.ApiStatus("/premium/active-empty", true, "1004", "225", null),
+                new HealthQuoteBatch.ApiStatus("/premium/failed", false, "1005", "190", "timeout"));
+        when(healthService.fetch(any())).thenReturn(new HealthQuoteBatch(List.of(), statuses));
+        assertThatThrownBy(() -> service.getQuotes(request)).isInstanceOf(PolicyPlannerException.class)
+                .satisfies(ex -> assertThat(((PolicyPlannerException) ex).apiError().status()).isEqualTo(503));
+        verify(auditService).save(anyString(), eq("HEALTH"), anyString(), anyString(),
+                argThat(v -> v.contains("/premium/active-empty") && !v.contains("/premium/failed")),
+                argThat(v -> v.contains("/premium/failed") && !v.contains("/premium/active-empty")),
+                eq("[]"), contains("Policy Planner service is temporarily unavailable"));
+    }
+
+    @Test void shouldSeparateActiveAndFailedApisWhenHealthMappingFails() {
+        var request = healthRequest(1000000L);
+        var statuses = List.of(
+                new HealthQuoteBatch.ApiStatus("/premium/success", true, "1004", "225", null),
+                new HealthQuoteBatch.ApiStatus("/premium/failed", false, "1005", "190", "No premium found"));
+        var batch = new HealthQuoteBatch(List.of(vendor()), statuses);
+        when(healthService.fetch(any())).thenReturn(batch);
+        when(healthService.build(anyString(), any(), eq(batch))).thenThrow(new IllegalStateException("mapping broke"));
+        assertThatThrownBy(() -> service.getQuotes(request)).isInstanceOf(BoltPeInsuranceException.class)
+                .satisfies(ex -> assertThat(((BoltPeInsuranceException) ex).apiError().status()).isEqualTo(500));
+        verify(auditService).save(anyString(), eq("HEALTH"), anyString(), anyString(),
+                argThat(v -> v.contains("/premium/success") && !v.contains("/premium/failed")),
+                argThat(v -> v.contains("/premium/failed") && !v.contains("/premium/success")),
+                contains("Health Edge"), contains("BoltPe Insurance service encountered an unexpected error"));
+    }
+
+    @Test void shouldAuditEmptyVendorSnapshotWhenFailureSnapshotCannotBeSerialized() {
+        JsonMapper mapper = spy(new JsonMapper());
+        doThrow(new IllegalStateException("snapshot not serializable")).when(mapper)
+                .writeValueAsString(argThat(v -> v instanceof List<?> list && !list.isEmpty()
+                        && list.getFirst() instanceof HealthVendorResponse));
+        var failingSnapshotService = new InsuranceServiceImpl(healthService, auditService, mapper);
+        var batch = new HealthQuoteBatch(List.of(vendor()), List.of());
+        when(healthService.fetch(any())).thenReturn(batch);
+        when(healthService.build(anyString(), any(), eq(batch))).thenThrow(new IllegalStateException("mapping broke"));
+
+        assertThatThrownBy(() -> failingSnapshotService.getQuotes(healthRequest(1000000L)))
+                .isInstanceOf(BoltPeInsuranceException.class);
+        verify(auditService).save(anyString(), eq("HEALTH"), anyString(), anyString(), eq("[]"), eq("[]"),
+                eq("{}"), contains("BoltPe Insurance service encountered an unexpected error"));
+    }
+
+    @Test void shouldFailWithoutAuditWhenRequestSnapshotCannotBeSerialized() {
+        Map<String, Object> userInformation = Map.of("userId", "USR001", "device", new UnserializableValue());
+        var request = new InsuranceRequest(InsuranceType.HEALTH, userInformation,
+                new HealthInsuranceRequest(1000000L,"1",30,null,null,null,null,null));
+        assertThatThrownBy(() -> service.getQuotes(request)).isInstanceOf(PolicyPlannerException.class)
+                .hasMessage("Unable to serialize insurance request snapshot")
+                .hasCauseInstanceOf(tools.jackson.core.JacksonException.class);
+        verifyNoInteractions(auditService, healthService);
+    }
+
+    /** Jackson wraps the getter failure in a JacksonException during serialization. */
+    static final class UnserializableValue {
+        public String getValue() { throw new IllegalStateException("cannot read value"); }
+    }
+
+    private HealthVendorResponse vendor() {
+        return new HealthVendorResponse(null, "1004", "225", "Health Edge", 1000000L, 1, 1, 0, 30, 30,
+                BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO, List.of(), null, null, List.of(), List.of(), List.of(), List.of(), List.of());
+    }
 }

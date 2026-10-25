@@ -19,6 +19,7 @@
     <properties>
         <java.version>21</java.version>
         <jacoco.version>0.8.14</jacoco.version>
+        <aws.sdk.version>2.30.38</aws.sdk.version>
         <sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
         <sonar.coverage.exclusions>**/dto/**,**/entity/**,**/repository/**,**/config/**,**/*Application.java,**/exception/**,**/client/PolicyPlannerHttpGateway.java</sonar.coverage.exclusions>
     </properties>
@@ -48,6 +49,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws.sdk.version}</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -81,7 +87,6 @@
                 <version>${jacoco.version}</version>
                 <configuration>
                     <excludes>
-                        <exclude>**/dto/**</exclude>
                         <exclude>**/entity/**</exclude>
                         <exclude>**/repository/**</exclude>
                         <exclude>**/config/**</exclude>
@@ -111,7 +116,7 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.80</minimum>
+                                            <minimum>0.85</minimum>
                                         </limit>
                                     </limits>
                                 </rule>

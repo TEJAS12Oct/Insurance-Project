@@ -12,6 +12,14 @@ public record InsuranceRequest(
         @NotNull InsuranceType insuranceType,
         Map<String, Object> userInformation,
         @NotNull Map<String, Object> data) {
+    private static final String FIELD_CATEGORY = "category";
+    private static final String FIELD_SPOUSE_AGE = "spouseAge";
+    private static final String FIELD_CHILD1_AGE = "child1Age";
+    private static final String FIELD_CHILD2_AGE = "child2Age";
+    private static final String FIELD_CHILD3_AGE = "child3Age";
+    private static final String FIELD_CHILD4_AGE = "child4Age";
+    private static final String FIELD_COVER_AMOUNT = "coverAmount";
+
 
     public InsuranceRequest {
         userInformation = userInformation == null ? Map.of() : Map.copyOf(userInformation);
@@ -66,13 +74,13 @@ public record InsuranceRequest(
     @AssertTrue(message = "Kindly select category")
     public boolean isPersonalAccidentCategorySelected() {
         if (insuranceType != InsuranceType.PERSONAL_ACCIDENT) return true;
-        return hasText("category");
+        return hasText(FIELD_CATEGORY);
     }
 
     @AssertTrue(message = "category must be one of: 1, 2, 3")
     public boolean isPersonalAccidentCategoryValid() {
-        if (insuranceType != InsuranceType.PERSONAL_ACCIDENT || !hasText("category")) return true;
-        return isExactCode123("category");
+        if (insuranceType != InsuranceType.PERSONAL_ACCIDENT || !hasText(FIELD_CATEGORY)) return true;
+        return isExactCode123(FIELD_CATEGORY);
     }
 
     @AssertTrue(message = "Kindly select at least 1 adult")
@@ -91,20 +99,20 @@ public record InsuranceRequest(
     @AssertTrue(message = "spouse_age must be a valid whole number")
     public boolean isSpouseAgeWholeNumber() {
         if (insuranceType != InsuranceType.HEALTH && insuranceType != InsuranceType.SUPER_TOP_UP) return true;
-        return isWholeNumber("spouseAge");
+        return isWholeNumber(FIELD_SPOUSE_AGE);
     }
 
     @AssertTrue(message = "spouse_age must be at least 18")
     public boolean isSpouseMinimumAgeValid() {
         if (insuranceType != InsuranceType.HEALTH && insuranceType != InsuranceType.SUPER_TOP_UP) return true;
-        Integer spouse = intValue("spouseAge");
+        Integer spouse = intValue(FIELD_SPOUSE_AGE);
         return spouse == null || spouse >= 18;
     }
 
     @AssertTrue(message = "child_N_age must be a valid whole number")
     public boolean areChildAgesWholeNumbers() {
         if (isNotFamilyProduct()) return true;
-        return isWholeNumber("child1Age") && isWholeNumber("child2Age") && isWholeNumber("child3Age") && isWholeNumber("child4Age");
+        return isWholeNumber(FIELD_CHILD1_AGE) && isWholeNumber(FIELD_CHILD2_AGE) && isWholeNumber(FIELD_CHILD3_AGE) && isWholeNumber(FIELD_CHILD4_AGE);
     }
 
     @AssertTrue(message = "child_N_age cannot be negative")
@@ -132,7 +140,7 @@ public record InsuranceRequest(
     @AssertTrue(message = "spouse age must be at least 21 years greater than child_N_age")
     public boolean isSpouseChildGapValid() {
         if (isNotFamilyProduct()) return true;
-        Integer spouse = intValue("spouseAge");
+        Integer spouse = intValue(FIELD_SPOUSE_AGE);
         if (spouse == null) return true;
         for (String key : childKeys()) {
             Integer child = intValue(key);
@@ -169,7 +177,7 @@ public record InsuranceRequest(
 
     private boolean validPersonalAccidentData() {
         Long coverAmount = coverAmountValue();
-        Integer category = intValue("category");
+        Integer category = intValue(FIELD_CATEGORY);
         return coverAmount != null
                 && PersonalAccidentInsuranceRequest.ALLOWED_COVER_AMOUNTS.contains(coverAmount)
                 && category != null;
@@ -224,8 +232,10 @@ public record InsuranceRequest(
         return insuranceType != InsuranceType.HEALTH && insuranceType != InsuranceType.SUPER_TOP_UP;
     }
 
+    private static final String[] CHILD_KEYS = {FIELD_CHILD1_AGE, FIELD_CHILD2_AGE, FIELD_CHILD3_AGE, FIELD_CHILD4_AGE};
+
     private static String[] childKeys() {
-        return new String[]{"child1Age", "child2Age", "child3Age", "child4Age"};
+        return CHILD_KEYS.clone();
     }
 
     private boolean isWholeNumber(String key) {
@@ -249,28 +259,50 @@ public record InsuranceRequest(
     }
 
     private Long coverAmountValue() {
-        Object value = data.get("coverAmount");
-        if (value == null) return null;
-
-        // coverAmount and other Long-backed request values must be true whole numbers.
-        // Do not truncate decimal values (for example 1000000.5 -> 1000000).
+        Object value = data.get(FIELD_COVER_AMOUNT);
+        if (value == null) {
+            return null;
+        }
         if (value instanceof Byte || value instanceof Short || value instanceof Integer || value instanceof Long) {
             return ((Number) value).longValue();
         }
         if (value instanceof java.math.BigInteger integer) {
-            try { return integer.longValueExact(); }
-            catch (ArithmeticException ex) { return null; }
+            return exactLong(integer);
         }
         if (value instanceof java.math.BigDecimal decimal) {
-            try { return decimal.longValueExact(); }
-            catch (ArithmeticException ex) { return null; }
+            return exactLong(decimal);
         }
         if (value instanceof Float || value instanceof Double) {
-            double number = ((Number) value).doubleValue();
-            if (!Double.isFinite(number) || number != Math.rint(number)) return null;
-            if (number < Long.MIN_VALUE || number > Long.MAX_VALUE) return null;
-            return (long) number;
+            return exactFloatingLong(((Number) value).doubleValue());
         }
+        return parseLong(value);
+    }
+
+    private static Long exactLong(java.math.BigInteger number) {
+        try {
+            return number.longValueExact();
+        } catch (ArithmeticException ex) {
+            return null;
+        }
+    }
+
+    private static Long exactLong(java.math.BigDecimal number) {
+        try {
+            return number.longValueExact();
+        } catch (ArithmeticException ex) {
+            return null;
+        }
+    }
+
+    private static Long exactFloatingLong(double number) {
+        if (!Double.isFinite(number) || number != Math.rint(number)
+                || number < Long.MIN_VALUE || number > Long.MAX_VALUE) {
+            return null;
+        }
+        return (long) number;
+    }
+
+    private static Long parseLong(Object value) {
         try {
             return Long.valueOf(String.valueOf(value));
         } catch (NumberFormatException ex) {
@@ -286,14 +318,14 @@ public record InsuranceRequest(
     private static Map<String, Object> healthToMap(HealthInsuranceRequest h) {
         if (h == null) return Map.of();
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("coverAmount", h.coverAmount());
+        m.put(FIELD_COVER_AMOUNT, h.coverAmount());
         m.put("zone", h.zone());
         m.put("age", h.age());
-        m.put("spouseAge", h.spouseAge());
-        m.put("child1Age", h.child1Age());
-        m.put("child2Age", h.child2Age());
-        m.put("child3Age", h.child3Age());
-        m.put("child4Age", h.child4Age());
+        m.put(FIELD_SPOUSE_AGE, h.spouseAge());
+        m.put(FIELD_CHILD1_AGE, h.child1Age());
+        m.put(FIELD_CHILD2_AGE, h.child2Age());
+        m.put(FIELD_CHILD3_AGE, h.child3Age());
+        m.put(FIELD_CHILD4_AGE, h.child4Age());
         return m;
     }
 }

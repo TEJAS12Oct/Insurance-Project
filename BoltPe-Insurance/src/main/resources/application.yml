@@ -21,6 +21,7 @@ spring:
     redis:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
 
 policy-planner:
   base-url: ${POLICY_PLANNER_BASE_URL}
@@ -38,6 +39,19 @@ policy-planner:
 insurance:
   refresh:
     cron: ${INSURANCE_REFRESH_CRON}
+  logo:
+    # Insurer logos live in the public S3 folder: {s3.endpoint}/{s3.bucket-name}/{s3.public-folder}/{folder}/{file}.
+    # Missing logos are uploaded from src/main/resources/insurer-logos on startup.
+    folder: insurancelogo
+
+# Amazon S3 storage. Keep real credentials in deployment secrets, not source control.
+s3:
+  endpoint: ${S3_ENDPOINT}
+  region: ${S3_REGION}
+  access-key: ${S3_ACCESS_KEY}
+  secret-key: ${S3_SECRET_KEY}
+  bucket-name: ${S3_BUCKET_NAME}
+  public-folder: ${S3_PUBLIC_FOLDER}
 
 management:
   endpoints:
